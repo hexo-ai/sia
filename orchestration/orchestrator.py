@@ -65,16 +65,36 @@ parser = argparse.ArgumentParser(description='Run the orchestrator for agent evo
 parser.add_argument('--max_gen', type=int, default=3, help='Maximum number of generations to run (default: 3)')
 parser.add_argument('--run_id', type=int, default=1, help='Run ID for this experiment (default: 1)')
 parser.add_argument('--task_dir', type=str, required=True, help='Path to the task directory (e.g., ./tasks/task_1)')
+parser.add_argument('--meta-model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, google/gemini-2.0-flash-exp for openhands backend)')
+parser.add_argument('--task-model', type=str, default='claude-haiku-4-5-20251001', help='Model to use for target agent (default: claude-haiku-4-5-20251001)')
+parser.add_argument('--backend', type=str, default='claude', choices=['claude', 'openhands'], help='Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)')
 args = parser.parse_args()
 
 max_gen = args.max_gen
 task_dir = args.task_dir
 run_id = args.run_id
+backend = args.backend
+
+# Set default meta-model based on backend if not explicitly provided
+if args.meta_model is None:
+    if backend == 'openhands':
+        meta_model = 'google/gemini-2.0-flash-exp'
+        logger.info("Using default OpenHands model: google/gemini-2.0-flash-exp")
+    else:
+        meta_model = 'haiku'
+        logger.info("Using default Claude model: haiku")
+else:
+    meta_model = args.meta_model
+
+task_model = args.task_model
 
 logger.info(f"Configuration:")
 logger.info(f"  - Maximum generations: {max_gen}")
 logger.info(f"  - Task directory: {task_dir}")
 logger.info(f"  - Run ID: {run_id}")
+logger.info(f"  - Agent backend: {backend}")
+logger.info(f"  - Meta-agent model: {meta_model}")
+logger.info(f"  - Task-agent model: {task_model}")
 
 
 # ========================
@@ -127,7 +147,7 @@ pip_executable = os.path.join(venv_dir, "bin", "pip")
 
 # Install required packages: anthropic, python-dotenv
 logger.info("Installing required packages: anthropic, python-dotenv in the virtual environment")
-subprocess.run([pip_executable, "install", "anthropic", "python-dotenv"], check=True)
+subprocess.run([pip_executable, "install", "anthropic", "python-dotenv", "google-genai", "tqdm", "pydantic"], check=True)
 
 
 # ========================
@@ -164,7 +184,7 @@ CRITICAL RULES - FOLLOW EXACTLY:
 4. The target agent can ONLY read from the dataset directory provided via --dataset_dir, and can ONLY write to the working directory specified by --working_dir. It must NOT access any other directories on the filesystem.
 5. The target_agent.py should log its execution trajectory to a JSON file named 'agent_execution.json' in its working directory. This log should include all messages, tool calls, and their results. Use the same format as the sample agent execution trajectory provided above. Make sure to properly close the JSON file to avoid corruption.
 6. Do NOT attempt to write to or modify files inside the dataset directory. It is READ-ONLY.
-7. The target_agent.py should use only the "haiku" or "claude-haiku-4-5-20251001" model from Anthropic/Claude when invoking the language model (do not use any other model).
+7. The target_agent.py should use only the "{task_model}" model when invoking the language model (do not use any other model).
 8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to Claude in the prompt.
 
 Example invocation (paths will vary at runtime):
@@ -220,10 +240,11 @@ RULES:
 # ========================
 
 asyncio.run(run_agent(
-    model_name="haiku",
+    model_name=meta_model,
     max_turns="20",
     prompt=META_AGENT_PROMPT,
-    agent_working_directory=META_AGENT_WORKING_DIRECTORY
+    agent_working_directory=META_AGENT_WORKING_DIRECTORY,
+    backend=backend
 ))
 
 
@@ -393,10 +414,11 @@ STDERR:
         os.makedirs(next_gen_directory, exist_ok=True)
         asyncio.run(
             run_agent(
-                model_name="haiku",
+                model_name=meta_model,
                 max_turns="20",
                 prompt=feedback_agent_prompt_prepared,
                 agent_working_directory=next_gen_directory,
+                backend=backend
             )
         )
 
