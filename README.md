@@ -74,13 +74,28 @@ sia/
    ```bash
    pip install -r requirements.txt
    ```
-4. **Anthropic API key** set in environment:
+4. **API Keys**: Set the appropriate API keys based on which backend and models you plan to use:
+
+   **For Claude Code backend (default):**
    ```bash
    export ANTHROPIC_API_KEY="your-anthropic-api-key"
    ```
-5. **Gemini API key** (optional, for similar task generation):
+
+   **For OpenHands backend with multiple LLMs:**
    ```bash
+   # For Claude models via OpenHands
+   export ANTHROPIC_API_KEY="your-anthropic-api-key"
+
+   # For Gemini models via OpenHands
+   export GOOGLE_API_KEY="your-google-api-key"
+   # OR
    export GEMINI_API_KEY="your-gemini-api-key"
+
+   # For GPT models via OpenHands
+   export OPENAI_API_KEY="your-openai-api-key"
+
+   # Generic fallback (if specific keys not set)
+   export LLM_API_KEY="your-api-key"
    ```
 
 ## Example Usage
@@ -137,14 +152,29 @@ To create a new custom task (e.g., for GPQA), follow these streamlined steps:
 
 ### Step 2: Run the Orchestrator
 
+**Basic Usage (Claude backend):**
 ```bash
 python orchestration/orchestrator.py --task_dir ./tasks/gpqa --max_gen 5 --run_id 1
 ```
 
-**Arguments:**
+**Using OpenHands with Gemini:**
+```bash
+python orchestration/orchestrator.py \
+  --task_dir ./tasks/gpqa \
+  --max_gen 5 \
+  --run_id 1 \
+  --backend openhands \
+  --meta-model "google/gemini-2.0-pro"
+```
+
+**Key Arguments:**
 - `--task_dir`: Path to the task directory (e.g., `./tasks/spaceship-titanic`)
 - `--max_gen`: Number of generations to evolve (default: 3)
 - `--run_id`: Unique identifier for this run (default: 1)
+- `--backend`: Agent backend to use: `claude` (default) or `openhands`
+- `--meta-model`: Model for meta/feedback agents (default: `haiku`)
+
+See the [Configuration](#configuration) section below for detailed backend and model options.
 
 **What happens during execution:**
 
@@ -254,21 +284,106 @@ The orchestrator creates a fresh venv for each run. If packages are missing:
 
 ## Configuration
 
+### Agent Backend Selection
+
+SIA supports two agent backends for maximum flexibility:
+
+#### 1. Claude Code Backend (Default)
+Uses the Claude Agent SDK with Claude models only:
+
+```bash
+python orchestration/orchestrator.py \
+  --task_dir ./tasks/gpqa \
+  --max_gen 5 \
+  --run_id 1 \
+  --backend claude \
+  --meta-model haiku
+```
+
+**Supported Models:**
+- `haiku` (claude-haiku-4-5-20251001)
+- `sonnet` (claude-sonnet-4-5-20250929)
+- `opus` (claude-opus-4-5-20251101)
+
+#### 2. OpenHands Backend
+Uses the OpenHands SDK with support for multiple LLM providers:
+
+```bash
+python orchestration/orchestrator.py \
+  --task_dir ./tasks/gpqa \
+  --max_gen 5 \
+  --run_id 2 \
+  --backend openhands \
+  --meta-model "google/gemini-2.0-pro"
+```
+
+**Supported Models:**
+
+**Google Gemini:**
+```bash
+--meta-model "google/gemini-2.0-pro"
+--meta-model "google/gemini-1.5-pro"
+```
+
+**OpenAI GPT:**
+```bash
+--meta-model "openai/gpt-4"
+--meta-model "openai/gpt-4-turbo"
+```
+
+**Anthropic Claude (via OpenHands):**
+```bash
+--meta-model "anthropic/claude-sonnet-4-5-20250929"
+--meta-model "anthropic/claude-opus-4-5-20251101"
+```
+
+### Complete Example: Testing Multiple LLMs
+
+```bash
+# Run 1: Claude via Claude Code (default)
+python orchestration/orchestrator.py \
+  --task_dir ./tasks/gpqa \
+  --max_gen 3 \
+  --run_id 1 \
+  --backend claude \
+  --meta-model haiku
+
+# Run 2: Gemini via OpenHands
+python orchestration/orchestrator.py \
+  --task_dir ./tasks/gpqa \
+  --max_gen 3 \
+  --run_id 2 \
+  --backend openhands \
+  --meta-model "google/gemini-2.0-pro"
+
+# Run 3: GPT-4 via OpenHands
+python orchestration/orchestrator.py \
+  --task_dir ./tasks/gpqa \
+  --max_gen 3 \
+  --run_id 3 \
+  --backend openhands \
+  --meta-model "openai/gpt-4"
+```
+
+### Command-Line Arguments Reference
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--task_dir` | Yes | - | Path to task directory (e.g., `./tasks/gpqa`) |
+| `--max_gen` | No | 3 | Number of improvement generations |
+| `--run_id` | No | 1 | Unique run identifier |
+| `--backend` | No | `claude` | Agent backend: `claude` or `openhands` |
+| `--meta-model` | No | `haiku` | Model for meta and feedback agents |
+| `--task-model` | No | `claude-haiku-4-5-20251001` | Model for target agent execution |
+
 ### Model Selection
 
-The default model is `haiku` (claude-haiku-4-5-20251001). To use a different model:
+The default model is `haiku` (claude-haiku-4-5-20251001). To use a different model, use the `--meta-model` and `--task-model` arguments as shown above.
 
-1. Edit `orchestrator.py`:
-   ```python
-   asyncio.run(run_agent(
-       model_name="sonnet",  # Change here
-       max_turns="20",
-       prompt=META_AGENT_PROMPT,
-       agent_working_directory=META_AGENT_WORKING_DIRECTORY
-   ))
-   ```
-
-2. Update the META_AGENT_PROMPT to specify the model for target agents
+**Important Notes:**
+- When using the `claude` backend, only Claude model names are supported (`haiku`, `sonnet`, `opus`)
+- When using the `openhands` backend, use fully-qualified model names (e.g., `google/gemini-2.0-pro`)
+- Ensure the appropriate API keys are set in your environment for the models you choose
 
 ### Customizing Prompts
 

@@ -16,7 +16,10 @@ AgentBackend = Literal["claude", "openhands"]
 
 
 async def run_agent_claude(model_name, max_turns, prompt, agent_working_directory):
-    """Run agent using Claude Code SDK"""
+    """Run agent using Claude Code SDK
+
+    Note: Claude Code automatically saves trajectories to ~/.claude/projects/
+    """
     from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
 
     logger.info("=" * 80)
@@ -150,10 +153,14 @@ async def run_agent_openhands(model_name, max_turns, prompt, agent_working_direc
             ],
         )
 
-        # Create conversation with workspace
+        # Create conversation with workspace and persistence
+        # Trajectory will be saved in: agent_working_directory/openhands_trajectory/
+        trajectory_dir = os.path.join(agent_working_directory, "openhands_trajectory")
+
         conversation = Conversation(
             agent=agent,
-            workspace=agent_working_directory
+            workspace=agent_working_directory,
+            persistence_dir=trajectory_dir
         )
 
         # Send the task prompt
@@ -164,6 +171,7 @@ async def run_agent_openhands(model_name, max_turns, prompt, agent_working_direc
 
         # Run the agent
         logger.info(f"Running agent (max turns: {max_turns})...")
+        logger.info(f"  → Trajectory will be saved to: {trajectory_dir}")
         result = conversation.run()
 
         # Log completion
@@ -173,6 +181,7 @@ async def run_agent_openhands(model_name, max_turns, prompt, agent_working_direc
         logger.info(f"{'=' * 80}")
         logger.info(f"Execution time: {elapsed_time:.2f} seconds")
         logger.info(f"Final result: {result}")
+        logger.info(f"  ✓ Trajectory saved to: {trajectory_dir}")
         logger.info(f"{'=' * 80}")
 
     except Exception as e:
