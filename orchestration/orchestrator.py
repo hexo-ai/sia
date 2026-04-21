@@ -6,7 +6,7 @@ orchestration/
 
 tasks/
   task_1/
-    spec/
+    reference/
       reference_target_agent.py
       SAMPLE_TASK_DESCRIPTIONS.md
     data/
@@ -16,7 +16,7 @@ tasks/
         task.md
       private/
   task_2/
-    spec/
+    reference/
       reference_target_agent.py
       SAMPLE_TASK_DESCRIPTIONS.md
     data/
@@ -87,10 +87,10 @@ logger.info(f"  - Task model: {task_model}")
 
 logger.info("Loading files from task directory...")
 
-SAMPLE_TASK_DESCRIPTIONS = open(os.path.join(task_dir, "spec/SAMPLE_TASK_DESCRIPTIONS.md")).read()
+SAMPLE_TASK_DESCRIPTIONS = open(os.path.join(task_dir, "reference/SAMPLE_TASK_DESCRIPTIONS.md")).read()
 logger.info("  ✓ Sample task descriptions loaded")
 
-REFERENCE_TARGET_AGENT_PY = open(os.path.join(task_dir, "spec/reference_target_agent.py")).read()
+REFERENCE_TARGET_AGENT_PY = open(os.path.join(task_dir, "reference/reference_target_agent.py")).read()
 logger.info("  ✓ Reference target agent loaded")
 
 SAMPLE_AGENT_EXECUTION = json.load(open(os.path.join(task_dir, "../_shared/sample_agent_execution.json")))

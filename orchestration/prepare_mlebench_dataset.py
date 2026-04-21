@@ -7,8 +7,8 @@ This script:
 2. Copies public and private data to tasks/competition-id/data/
 3. Renames description.md to task.md in data/public/
 4. Generates similar tasks using Gemini API (optional)
-5. Creates SAMPLE_TASK_DESCRIPTIONS.md in spec/
-6. Copies reference_target_agent.py from _shared/ to spec/
+5. Creates SAMPLE_TASK_DESCRIPTIONS.md in reference/
+6. Copies reference_target_agent.py from _shared/ to reference/
 """
 
 import argparse
@@ -175,14 +175,14 @@ Generate tasks that will help train a generalizable AI agent capable of handling
 
 
 def create_sample_task_descriptions(competition_id: str, tasks_dir: Path, similar_tasks: str) -> bool:
-    """Create SAMPLE_TASK_DESCRIPTIONS.md in spec directory."""
+    """Create SAMPLE_TASK_DESCRIPTIONS.md in reference directory."""
     print(f"[5/6] Creating SAMPLE_TASK_DESCRIPTIONS.md")
 
     task_dir = tasks_dir / competition_id
-    spec_dir = task_dir / "spec"
-    spec_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir = task_dir / "reference"
+    reference_dir.mkdir(parents=True, exist_ok=True)
 
-    sample_file = spec_dir / "SAMPLE_TASK_DESCRIPTIONS.md"
+    sample_file = reference_dir / "SAMPLE_TASK_DESCRIPTIONS.md"
 
     content = f"""
 {similar_tasks if similar_tasks else "No similar tasks generated."}
@@ -194,7 +194,7 @@ def create_sample_task_descriptions(competition_id: str, tasks_dir: Path, simila
 
 
 def copy_reference_agent(competition_id: str, tasks_dir: Path) -> bool:
-    """Copy reference_target_agent.py from _shared to competition spec directory."""
+    """Copy reference_target_agent.py from _shared to competition reference directory."""
     print(f"[6/6] Copying reference_target_agent.py")
 
     shared_dir = tasks_dir / "_shared"
@@ -205,10 +205,10 @@ def copy_reference_agent(competition_id: str, tasks_dir: Path) -> bool:
         return False
 
     task_dir = tasks_dir / competition_id
-    spec_dir = task_dir / "spec"
-    spec_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir = task_dir / "reference"
+    reference_dir.mkdir(parents=True, exist_ok=True)
 
-    dest_file = spec_dir / "reference_target_agent.py"
+    dest_file = reference_dir / "reference_target_agent.py"
 
     shutil.copy2(reference_file, dest_file)
     print(f"  ✓ Copied reference agent to {dest_file}")
@@ -288,8 +288,8 @@ def main():
     print(f"      - task.md                       : Task description")
     print(f"      - *.csv                         : Data files")
     print(f"  - data/private/                     : Private dataset")
-    print(f"  - spec/SAMPLE_TASK_DESCRIPTIONS.md  : Similar tasks from Gemini")
-    print(f"  - spec/reference_target_agent.py    : Reference agent template")
+    print(f"  - reference/SAMPLE_TASK_DESCRIPTIONS.md  : Similar tasks from Gemini")
+    print(f"  - reference/reference_target_agent.py    : Reference agent template")
     print()
 
     return 0

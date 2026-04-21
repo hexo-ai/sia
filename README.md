@@ -48,7 +48,7 @@ sia/
 │       │   │   ├── task.md           # Task description
 │       │   │   └── *.csv             # Data files
 │       │   └── private/          # Private dataset
-│       └── spec/
+│       └── reference/
 │           ├── SAMPLE_TASK_DESCRIPTIONS.md
 │           └── reference_target_agent.py
 └── runs/                         # Generated during execution
@@ -95,7 +95,7 @@ To create a new custom task (e.g., for GPQA), follow these streamlined steps:
 1. **Create the task directory structure:**
 
    ```bash
-   mkdir -p tasks/gpqa/{data/public,data/private,spec}
+   mkdir -p tasks/gpqa/{data/public,data/private,reference}
    ```
 
 2. **Add your dataset and task description:**
@@ -127,11 +127,11 @@ To create a new custom task (e.g., for GPQA), follow these streamlined steps:
 3. **Copy the reference agent template:**
 
    ```bash
-   cp tasks/_shared/reference_target_agent.py tasks/gpqa/spec/
+   cp tasks/_shared/reference_target_agent.py tasks/gpqa/reference/
    ```
 
 4. **(Optional) Add sample task descriptions:**
-   You may create `tasks/gpqa/spec/SAMPLE_TASK_DESCRIPTIONS.md` with examples of similar tasks. This helps the agent generalize better and prevents overfitting to the specific task, if that is your intention.
+   You may create `tasks/gpqa/reference/SAMPLE_TASK_DESCRIPTIONS.md` with examples of similar tasks. This helps the agent generalize better and prevents overfitting to the specific task, if that is your intention.
 
 ---
 
@@ -190,7 +190,7 @@ tasks/{task-id}/
 │   │   └── sample_submission.csv
 │   └── private/
 │       └── ...                        # Private evaluation data
-└── spec/
+└── reference/
     ├── SAMPLE_TASK_DESCRIPTIONS.md    # Similar tasks (for meta-agent context)
     └── reference_target_agent.py      # Template agent structure
 ```
@@ -210,15 +210,15 @@ This will:
 2. Copy public and private datasets from `~/.cache/mle-bench/data/prepared/`
 3. Rename `description.md` to `task.md` in `data/public/`
 4. Use Gemini to generate similar tasks (optional)
-5. Create `SAMPLE_TASK_DESCRIPTIONS.md` in `spec/`
-6. Copy `reference_target_agent.py` from `_shared/` to `spec/`
+5. Create `SAMPLE_TASK_DESCRIPTIONS.md` in `reference/`
+6. Copy `reference_target_agent.py` from `_shared/` to `reference/`
 
 **Options:**
 - `--skip-gemini`: Skip Gemini API call for similar tasks
 - `--tasks-dir PATH`: Specify custom tasks directory (default: `./tasks`)
 
 
-5. Optionally create `SAMPLE_TASK_DESCRIPTIONS.md` manually in `spec/`
+5. Optionally create `SAMPLE_TASK_DESCRIPTIONS.md` manually in `reference/`
 
 
 ------
