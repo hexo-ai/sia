@@ -6,8 +6,8 @@ Below are example results showing progressive improvement of SIA on scientific t
 
 <table width="100%">
   <tr>
-    <td width="50%" align="center"><b>GPQA (Graduate-level Science QA)</b><br><img src="plots/gpqa.png" alt="GPQA Results" height="220"></td>
-    <td width="50%" align="center"><b>ML Agent Experiment</b><br><img src="plots/ml_agent.png" alt="ML Agent Results" height="220"></td>
+    <td width="50%" align="center"><br><img src="plots/gpqa.png" alt="GPQA Results" height="220"></td>
+    <td width="50%" align="center"><br><img src="plots/ml_agent.png" alt="ML Agent Results" height="220"></td>
   </tr>
 </table>
 
