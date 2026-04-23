@@ -165,8 +165,8 @@ parser = argparse.ArgumentParser(description='Run the orchestrator for agent evo
 parser.add_argument('--max_gen', type=int, default=3, help='Maximum number of generations to run (default: 3)')
 parser.add_argument('--run_id', type=int, default=1, help='Run ID for this experiment (default: 1)')
 parser.add_argument('--task_dir', type=str, required=True, help='Path to the task directory (e.g., ./tasks/task_1)')
-parser.add_argument('--meta-model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, google/gemini-2.0-flash-exp for openhands backend)')
-parser.add_argument('--task-model', type=str, default='claude-haiku-4-5-20251001', help='Model to use for target agent (default: claude-haiku-4-5-20251001)')
+parser.add_argument('--meta_model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, google/gemini-2.0-flash-exp for openhands backend)')
+parser.add_argument('--task_model', type=str, default='claude-haiku-4-5-20251001', help='Model to use for target agent (default: claude-haiku-4-5-20251001)')
 parser.add_argument('--backend', type=str, default='claude', choices=['claude', 'openhands'], help='Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)')
 args = parser.parse_args()
 
@@ -211,6 +211,9 @@ logger.info("  ✓ Reference target agent loaded")
 
 SAMPLE_AGENT_EXECUTION = json.load(open(os.path.join(task_dir, "../_shared/sample_agent_execution.json")))
 logger.info("  ✓ Sample agent execution loaded")
+
+TASK_MD = open(os.path.join(task_dir, "data/public/task.md")).read()
+logger.info("  ✓ Task specification loaded")
 
 
 # ========================
@@ -268,10 +271,13 @@ logger.info("  ✓ Context manager initialized")
 
 META_AGENT_PROMPT = f"""You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
 
+Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve:
+{TASK_MD}
+
 Here are a couple of sample task descriptions which the target agent has to solve:
 {SAMPLE_TASK_DESCRIPTIONS}
 
-Here is a sample target_agent.py:
+Here is a sample target_agent.py showing the complete implementation pattern (READ THE ENTIRE FILE - especially the evaluation section at the end):
 {REFERENCE_TARGET_AGENT_PY}
 
 Here is a sample agent execution trajectory:
