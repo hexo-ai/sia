@@ -97,6 +97,79 @@ def dispatch_tool(name: str, inputs: dict) -> str:
     else:
         return f"Unknown tool: {name}"
 
+
+# ── Multi-Trajectory Logger ───────────────────────────────────────────────────
+
+class MultiTrajectoryLogger:
+    """
+    Logger for tasks with multiple independent samples (e.g., GPQA with multiple questions).
+
+    For tasks where you need to process multiple independent items (questions, test cases,
+    samples), this logger saves each trajectory separately instead of one large file.
+
+    Usage:
+        logger = MultiTrajectoryLogger(working_dir)
+
+        for idx, question in enumerate(questions):
+            messages = []
+            messages.append({"role": "user", "content": question_prompt})
+
+            response = client.messages.create(...)
+            messages.append({"role": "assistant", "content": response.content})
+
+            # Save this trajectory
+            logger.log_trajectory(idx, messages)
+
+        logger.finalize(len(questions))
+    """
+
+    def __init__(self, working_dir: str):
+        """
+        Initialize the multi-trajectory logger.
+
+        Args:
+            working_dir: Path to the working directory where agent_execution/ will be created
+        """
+        import os
+        self.working_dir = working_dir
+        self.execution_folder = os.path.join(working_dir, "agent_execution")
+        os.makedirs(self.execution_folder, exist_ok=True)
+        print(f"Initialized multi-trajectory logger at: {self.execution_folder}")
+
+    def log_trajectory(self, trajectory_id: int, messages: list):
+        """
+        Save a complete trajectory for one sample.
+
+        Args:
+            trajectory_id: Index of this trajectory (0-based)
+            messages: List of message dicts (same format as Anthropic API messages)
+        """
+        import os
+        filename = f"execution_q{trajectory_id}.json"
+        filepath = os.path.join(self.execution_folder, filename)
+
+        try:
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(messages, f, indent=2, ensure_ascii=False)
+            print(f"  ✓ Saved trajectory {trajectory_id} to {filename}")
+        except Exception as e:
+            print(f"  ✗ Error saving trajectory {trajectory_id}: {e}")
+
+    def finalize(self, total_count: int):
+        """
+        Log completion message.
+
+        Args:
+            total_count: Total number of trajectories saved
+        """
+        print(f"\n{'='*60}")
+        print(f"✓ Multi-trajectory logging complete:")
+        print(f"  - Total trajectories: {total_count}")
+        print(f"  - Saved to: {self.execution_folder}/")
+        print(f"  - Files: execution_q0.json to execution_q{total_count-1}.json")
+        print(f"{'='*60}\n")
+
+
 # ── Agent loop ────────────────────────────────────────────────────────────────
 
 def run_agent(task: str) -> None:
@@ -156,3 +229,76 @@ if __name__ == "__main__":
         "Write a Python file called hello.py that prints 'Hello, World!', "
         "then run it with bash and confirm the output is correct."
     )
+
+
+# ── Multi-Trajectory Usage Example ────────────────────────────────────────────
+"""
+USAGE EXAMPLE: Multi-Trajectory Logging for GPQA-style tasks
+
+For tasks with multiple independent questions/samples (like GPQA with 198 questions),
+use MultiTrajectoryLogger instead of saving to a single agent_execution.json file.
+
+Example implementation:
+
+    import argparse
+    import os
+
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset_dir', required=True)
+    parser.add_argument('--working_dir', required=True)
+    args = parser.parse_args()
+
+    # Initialize multi-trajectory logger
+    logger = MultiTrajectoryLogger(args.working_dir)
+
+    # Load dataset (e.g., GPQA questions)
+    questions_file = os.path.join(args.dataset_dir, "diamond_qna.json")
+    with open(questions_file) as f:
+        questions = json.load(f)
+
+    # Process each question independently
+    for idx, question_data in enumerate(questions):
+        print(f"\\nProcessing question {idx+1}/{len(questions)}...")
+
+        # Build conversation for this question
+        messages = []
+        messages.append({
+            "role": "user",
+            "content": f"Question: {question_data['question']}\\nChoices: {question_data['choices']}"
+        })
+
+        # Get response from Claude
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=1000,
+            messages=messages
+        )
+
+        # Add response to messages
+        messages.append({
+            "role": "assistant",
+            "content": response.content
+        })
+
+        # Save this trajectory
+        logger.log_trajectory(idx, messages)
+
+    # Finalize logging
+    logger.finalize(len(questions))
+
+This creates:
+    working_dir/agent_execution/execution_q0.json
+    working_dir/agent_execution/execution_q1.json
+    ...
+    working_dir/agent_execution/execution_q197.json
+
+Instead of a single large:
+    working_dir/agent_execution.json
+
+Benefits:
+- Each trajectory is isolated and independently parseable
+- Easier to debug specific questions
+- Better for large datasets (no single huge file)
+- Feedback agent can analyze patterns across trajectories
+"""
