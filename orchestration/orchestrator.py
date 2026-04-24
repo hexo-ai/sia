@@ -178,7 +178,7 @@ backend = args.backend
 # Set default meta-model based on backend if not explicitly provided
 if args.meta_model is None:
     if backend == 'openhands':
-        meta_model = 'google/gemini-2.0-flash-exp'
+        meta_model = 'gemini/gemini-3.1-pro-preview'
         logger.info("Using default OpenHands model: google/gemini-2.0-flash-exp")
     else:
         meta_model = 'haiku'
@@ -291,13 +291,13 @@ CRITICAL RULES - FOLLOW EXACTLY:
    - --dataset_dir: Absolute path to the dataset directory (READ-ONLY, provided at runtime)
    - --working_dir: Absolute path to the working directory (WRITE-ONLY, provided at runtime)
 
-3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to Claude. Claude MUST be explicitly told:
+3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to {task_model}. {task_model} MUST be explicitly told:
    - Where the dataset directory is located (the exact path from --dataset_dir)
    - Where the working directory is located (the exact path from --working_dir)
    - That it can ONLY READ from the dataset directory
    - That it can ONLY WRITE to the working directory
 
-   DO NOT let Claude search for data in random locations. The prompt must say: "The dataset is at: <actual_dataset_dir_path>"
+   DO NOT let {task_model} search for data in random locations. The prompt must say: "The dataset is at: <actual_dataset_dir_path>"
 
 4. The target agent can ONLY read from the dataset directory provided via --dataset_dir, and can ONLY write to the working directory specified by --working_dir. It must NOT access any other directories on the filesystem.
 
@@ -330,7 +330,7 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 6. Do NOT attempt to write to or modify files inside the dataset directory. It is READ-ONLY.
 7. The target_agent.py should use only the "{task_model}" model when invoking the language model (do not use any other model).
-8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to Claude in the prompt.
+8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to {task_model} in the prompt.
 
 Example invocation (paths will vary at runtime):
     python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working
