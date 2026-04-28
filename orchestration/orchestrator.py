@@ -277,7 +277,7 @@ Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve
 Here are a couple of sample task descriptions which the target agent has to solve:
 {SAMPLE_TASK_DESCRIPTIONS}
 
-Here is a sample target_agent.py showing the complete implementation pattern (READ THE ENTIRE FILE - especially the evaluation section at the end):
+Here is a sample target_agent.py showing the complete implementation pattern (READ THE ENTIRE FILE):
 {REFERENCE_TARGET_AGENT_PY}
 
 Here is a sample agent execution trajectory:
