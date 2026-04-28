@@ -213,7 +213,7 @@ async def run_agent(
         await run_agent("haiku", 20, prompt, "/path/to/dir", backend="claude")
 
         # OpenHands backend with Gemini
-        await run_agent("google/gemini-2.0-pro", 20, prompt, "/path/to/dir", backend="openhands")
+        await run_agent("gemini/gemini-3.1-pro-preview", 20, prompt, "/path/to/dir", backend="openhands")
 
         # OpenHands backend with GPT
         await run_agent("openai/gpt-4", 20, prompt, "/path/to/dir", backend="openhands")

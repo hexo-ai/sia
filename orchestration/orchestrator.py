@@ -165,7 +165,7 @@ parser = argparse.ArgumentParser(description='Run the orchestrator for agent evo
 parser.add_argument('--max_gen', type=int, default=3, help='Maximum number of generations to run (default: 3)')
 parser.add_argument('--run_id', type=int, default=1, help='Run ID for this experiment (default: 1)')
 parser.add_argument('--task_dir', type=str, required=True, help='Path to the task directory (e.g., ./tasks/task_1)')
-parser.add_argument('--meta_model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, google/gemini-2.0-flash-exp for openhands backend)')
+parser.add_argument('--meta_model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, gemini/gemini-3.1-pro-preview for openhands backend)')
 parser.add_argument('--task_model', type=str, default='claude-haiku-4-5-20251001', help='Model to use for target agent (default: claude-haiku-4-5-20251001)')
 parser.add_argument('--backend', type=str, default='claude', choices=['claude', 'openhands'], help='Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)')
 args = parser.parse_args()
@@ -179,7 +179,7 @@ backend = args.backend
 if args.meta_model is None:
     if backend == 'openhands':
         meta_model = 'gemini/gemini-3.1-pro-preview'
-        logger.info("Using default OpenHands model: google/gemini-2.0-flash-exp")
+        logger.info("Using default OpenHands model: gemini/gemini-3.1-pro-preview")
     else:
         meta_model = 'haiku'
         logger.info("Using default Claude model: haiku")

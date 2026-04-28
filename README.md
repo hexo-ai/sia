@@ -164,7 +164,7 @@ python orchestration/orchestrator.py \
   --max_gen 5 \
   --run_id 1 \
   --backend openhands \
-  --meta-model "google/gemini-2.0-pro"
+  --meta-model "gemini/gemini-3.1-pro-preview"
 ```
 
 **Key Arguments:**
@@ -314,15 +314,15 @@ python orchestration/orchestrator.py \
   --max_gen 5 \
   --run_id 2 \
   --backend openhands \
-  --meta-model "google/gemini-2.0-pro"
+  --meta-model "gemini/gemini-3.1-pro-preview"
 ```
 
 **Supported Models:**
 
 **Google Gemini:**
 ```bash
---meta-model "google/gemini-2.0-pro"
---meta-model "google/gemini-1.5-pro"
+--meta-model "gemini/gemini-3.0-pro"
+--meta-model "gemini/gemini-3.1-pro-preview"
 ```
 
 **OpenAI GPT:**
@@ -354,7 +354,7 @@ python orchestration/orchestrator.py \
   --max_gen 3 \
   --run_id 2 \
   --backend openhands \
-  --meta-model "google/gemini-2.0-pro"
+  --meta-model "gemini/gemini-3.1-pro-preview"
 
 # Run 3: GPT-4 via OpenHands
 python orchestration/orchestrator.py \
@@ -382,7 +382,7 @@ The default model is `haiku` (claude-haiku-4-5-20251001). To use a different mod
 
 **Important Notes:**
 - When using the `claude` backend, only Claude model names are supported (`haiku`, `sonnet`, `opus`)
-- When using the `openhands` backend, use fully-qualified model names (e.g., `google/gemini-2.0-pro`)
+- When using the `openhands` backend, use fully-qualified model names (e.g., `gemini/gemini-3.1-pro-preview`)
 - Ensure the appropriate API keys are set in your environment for the models you choose
 
 ### Customizing Prompts
