@@ -8,7 +8,7 @@ orchestration/
 
 tasks/
   task_1/
-    spec/
+    reference/
       reference_target_agent.py
       SAMPLE_TASK_DESCRIPTIONS.md
     data/
@@ -16,7 +16,7 @@ tasks/
         task.md
       private/
   task_2/
-    spec/
+    reference/
       reference_target_agent.py
       SAMPLE_TASK_DESCRIPTIONS.md
     data/
@@ -165,8 +165,8 @@ parser = argparse.ArgumentParser(description='Run the orchestrator for agent evo
 parser.add_argument('--max_gen', type=int, default=3, help='Maximum number of generations to run (default: 3)')
 parser.add_argument('--run_id', type=int, default=1, help='Run ID for this experiment (default: 1)')
 parser.add_argument('--task_dir', type=str, required=True, help='Path to the task directory (e.g., ./tasks/task_1)')
-parser.add_argument('--meta-model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, google/gemini-2.0-flash-exp for openhands backend)')
-parser.add_argument('--task-model', type=str, default='claude-haiku-4-5-20251001', help='Model to use for target agent (default: claude-haiku-4-5-20251001)')
+parser.add_argument('--meta_model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, google/gemini-2.0-flash-exp for openhands backend)')
+parser.add_argument('--task_model', type=str, default='claude-haiku-4-5-20251001', help='Model to use for target agent (default: claude-haiku-4-5-20251001)')
 parser.add_argument('--backend', type=str, default='claude', choices=['claude', 'openhands'], help='Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)')
 args = parser.parse_args()
 
@@ -178,7 +178,7 @@ backend = args.backend
 # Set default meta-model based on backend if not explicitly provided
 if args.meta_model is None:
     if backend == 'openhands':
-        meta_model = 'google/gemini-2.0-flash-exp'
+        meta_model = 'gemini/gemini-3.1-pro-preview'
         logger.info("Using default OpenHands model: google/gemini-2.0-flash-exp")
     else:
         meta_model = 'haiku'
@@ -203,14 +203,17 @@ logger.info(f"  - Task-agent model: {task_model}")
 
 logger.info("Loading files from task directory...")
 
-SAMPLE_TASK_DESCRIPTIONS = open(os.path.join(task_dir, "spec/SAMPLE_TASK_DESCRIPTIONS.md")).read()
+SAMPLE_TASK_DESCRIPTIONS = open(os.path.join(task_dir, "reference/SAMPLE_TASK_DESCRIPTIONS.md")).read()
 logger.info("  ✓ Sample task descriptions loaded")
 
-REFERENCE_TARGET_AGENT_PY = open(os.path.join(task_dir, "spec/reference_target_agent.py")).read()
+REFERENCE_TARGET_AGENT_PY = open(os.path.join(task_dir, "reference/reference_target_agent.py")).read()
 logger.info("  ✓ Reference target agent loaded")
 
 SAMPLE_AGENT_EXECUTION = json.load(open(os.path.join(task_dir, "../_shared/sample_agent_execution.json")))
 logger.info("  ✓ Sample agent execution loaded")
+
+TASK_MD = open(os.path.join(task_dir, "data/public/task.md")).read()
+logger.info("  ✓ Task specification loaded")
 
 
 # ========================
@@ -268,10 +271,13 @@ logger.info("  ✓ Context manager initialized")
 
 META_AGENT_PROMPT = f"""You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
 
+Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve:
+{TASK_MD}
+
 Here are a couple of sample task descriptions which the target agent has to solve:
 {SAMPLE_TASK_DESCRIPTIONS}
 
-Here is a sample target_agent.py:
+Here is a sample target_agent.py showing the complete implementation pattern (READ THE ENTIRE FILE):
 {REFERENCE_TARGET_AGENT_PY}
 
 Here is a sample agent execution trajectory:
@@ -285,13 +291,13 @@ CRITICAL RULES - FOLLOW EXACTLY:
    - --dataset_dir: Absolute path to the dataset directory (READ-ONLY, provided at runtime)
    - --working_dir: Absolute path to the working directory (WRITE-ONLY, provided at runtime)
 
-3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to Claude. Claude MUST be explicitly told:
+3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to {task_model}. {task_model} MUST be explicitly told:
    - Where the dataset directory is located (the exact path from --dataset_dir)
    - Where the working directory is located (the exact path from --working_dir)
    - That it can ONLY READ from the dataset directory
    - That it can ONLY WRITE to the working directory
 
-   DO NOT let Claude search for data in random locations. The prompt must say: "The dataset is at: <actual_dataset_dir_path>"
+   DO NOT let {task_model} search for data in random locations. The prompt must say: "The dataset is at: <actual_dataset_dir_path>"
 
 4. The target agent can ONLY read from the dataset directory provided via --dataset_dir, and can ONLY write to the working directory specified by --working_dir. It must NOT access any other directories on the filesystem.
 
@@ -324,7 +330,7 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 6. Do NOT attempt to write to or modify files inside the dataset directory. It is READ-ONLY.
 7. The target_agent.py should use only the "{task_model}" model when invoking the language model (do not use any other model).
-8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to Claude in the prompt.
+8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to {task_model} in the prompt.
 
 Example invocation (paths will vary at runtime):
     python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working
