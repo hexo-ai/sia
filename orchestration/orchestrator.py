@@ -175,7 +175,7 @@ task_dir = args.task_dir
 run_id = args.run_id
 backend = args.backend
 
-# Set default meta-model based on backend if not explicitly provided
+# Set default meta_model based on backend if not explicitly provided
 if args.meta_model is None:
     if backend == 'openhands':
         meta_model = 'gemini/gemini-3.1-pro-preview'

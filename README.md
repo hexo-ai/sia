@@ -164,7 +164,7 @@ python orchestration/orchestrator.py \
   --max_gen 5 \
   --run_id 1 \
   --backend openhands \
-  --meta-model "gemini/gemini-3.1-pro-preview"
+  --meta_model "gemini/gemini-3.1-pro-preview"
 ```
 
 **Key Arguments:**
@@ -172,7 +172,7 @@ python orchestration/orchestrator.py \
 - `--max_gen`: Number of generations to evolve (default: 3)
 - `--run_id`: Unique identifier for this run (default: 1)
 - `--backend`: Agent backend to use: `claude` (default) or `openhands`
-- `--meta-model`: Model for meta/feedback agents (default: `haiku`)
+- `--meta_model`: Model for meta/feedback agents (default: `haiku`)
 
 See the [Configuration](#configuration) section below for detailed backend and model options.
 
@@ -297,7 +297,7 @@ python orchestration/orchestrator.py \
   --max_gen 5 \
   --run_id 1 \
   --backend claude \
-  --meta-model haiku
+  --meta_model haiku
 ```
 
 **Supported Models:**
@@ -314,27 +314,27 @@ python orchestration/orchestrator.py \
   --max_gen 5 \
   --run_id 2 \
   --backend openhands \
-  --meta-model "gemini/gemini-3.1-pro-preview"
+  --meta_model "gemini/gemini-3.1-pro-preview"
 ```
 
 **Supported Models:**
 
 **Google Gemini:**
 ```bash
---meta-model "gemini/gemini-3.0-pro"
---meta-model "gemini/gemini-3.1-pro-preview"
+--meta_model "gemini/gemini-3.0-pro"
+--meta_model "gemini/gemini-3.1-pro-preview"
 ```
 
 **OpenAI GPT:**
 ```bash
---meta-model "openai/gpt-4"
---meta-model "openai/gpt-4-turbo"
+--meta_model "openai/gpt-4"
+--meta_model "openai/gpt-4-turbo"
 ```
 
 **Anthropic Claude (via OpenHands):**
 ```bash
---meta-model "anthropic/claude-sonnet-4-5-20250929"
---meta-model "anthropic/claude-opus-4-5-20251101"
+--meta_model "anthropic/claude-sonnet-4-5-20250929"
+--meta_model "anthropic/claude-opus-4-5-20251101"
 ```
 
 ### Complete Example: Testing Multiple LLMs
@@ -346,7 +346,7 @@ python orchestration/orchestrator.py \
   --max_gen 3 \
   --run_id 1 \
   --backend claude \
-  --meta-model haiku
+  --meta_model haiku
 
 # Run 2: Gemini via OpenHands
 python orchestration/orchestrator.py \
@@ -354,7 +354,7 @@ python orchestration/orchestrator.py \
   --max_gen 3 \
   --run_id 2 \
   --backend openhands \
-  --meta-model "gemini/gemini-3.1-pro-preview"
+  --meta_model "gemini/gemini-3.1-pro-preview"
 
 # Run 3: GPT-4 via OpenHands
 python orchestration/orchestrator.py \
@@ -362,7 +362,7 @@ python orchestration/orchestrator.py \
   --max_gen 3 \
   --run_id 3 \
   --backend openhands \
-  --meta-model "openai/gpt-4"
+  --meta_model "openai/gpt-4"
 ```
 
 ### Command-Line Arguments Reference
@@ -373,12 +373,12 @@ python orchestration/orchestrator.py \
 | `--max_gen` | No | 3 | Number of improvement generations |
 | `--run_id` | No | 1 | Unique run identifier |
 | `--backend` | No | `claude` | Agent backend: `claude` or `openhands` |
-| `--meta-model` | No | `haiku` | Model for meta and feedback agents |
-| `--task-model` | No | `claude-haiku-4-5-20251001` | Model for target agent execution |
+| `--meta_model` | No | `haiku` | Model for meta and feedback agents |
+| `--task_model` | No | `claude-haiku-4-5-20251001` | Model for target agent execution |
 
 ### Model Selection
 
-The default model is `haiku` (claude-haiku-4-5-20251001). To use a different model, use the `--meta-model` and `--task-model` arguments as shown above.
+The default model is `haiku` (claude-haiku-4-5-20251001). To use a different model, use the `--meta_model` and `--task_model` arguments as shown above.
 
 **Important Notes:**
 - When using the `claude` backend, only Claude model names are supported (`haiku`, `sonnet`, `opus`)
