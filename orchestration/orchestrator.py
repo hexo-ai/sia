@@ -3,8 +3,6 @@ Directory structure (conceptual)
 
 orchestration/
   orchestrator.py
-  feedback_agent.py
-  meta_agent.py
 
 tasks/
   task_1/
@@ -13,6 +11,8 @@ tasks/
       SAMPLE_TASK_DESCRIPTIONS.md
     data/
       public/
+        train.csv
+        test.csv
         task.md
       private/
   task_2/
@@ -32,15 +32,14 @@ runs/
     gen_1: (meta_agent, reference_target_agent) -> target_agent_1 -> gen_1
     gen_2: (feedback_agent, target_agent_1) -> target_agent_2 -> gen_2
     gen_3: (feedback_agent, target_agent_2) -> target_agent_3 -> gen_3
-  run_2/ (meta_agent, task_2)
+  run_2/ (unique meta_agent, unique feedback_agent, unique_task, reference_target_agent, config)
     gen_1: (meta_agent, reference_target_agent) -> target_agent_1 -> gen_1
     gen_2: (feedback_agent, target_agent_1) -> target_agent_2 -> gen_2
     gen_3: (feedback_agent, target_agent_2) -> target_agent_3 -> gen_3
-  run_3/ (meta_agent_2, task_2)
+  run_3/ (unique meta_agent, unique feedback_agent, unique_task, reference_target_agent, config)
     gen_1: (meta_agent, reference_target_agent) -> target_agent_1 -> gen_1
     gen_2: (feedback_agent, target_agent_1) -> target_agent_2 -> gen_2
     gen_3: (feedback_agent, target_agent_2) -> target_agent_3 -> gen_3
-
 """
 
 import os
@@ -289,13 +288,13 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 2. The target_agent.py MUST accept two command-line arguments:
    - --dataset_dir: Absolute path to the dataset directory (READ-ONLY, provided at runtime)
-   - --working_dir: Absolute path to the working directory (WRITE-ONLY, provided at runtime)
+   - --working_dir: Absolute path to the working directory (READ-WRITE, provided at runtime)
 
 3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to {task_model}. {task_model} MUST be explicitly told:
    - Where the dataset directory is located (the exact path from --dataset_dir)
    - Where the working directory is located (the exact path from --working_dir)
    - That it can ONLY READ from the dataset directory
-   - That it can ONLY WRITE to the working directory
+   - That it can READ from and WRITE to the working directory
 
    DO NOT let {task_model} search for data in random locations. The prompt must say: "The dataset is at: <actual_dataset_dir_path>"
 
