@@ -249,7 +249,7 @@ pip_executable = os.path.join(venv_dir, "bin", "pip")
 
 # Install required packages: anthropic, python-dotenv
 logger.info("Installing required packages: anthropic, python-dotenv in the virtual environment")
-subprocess.run([pip_executable, "install", "anthropic", "python-dotenv", "google-genai", "tqdm", "pydantic"], check=True)
+subprocess.run([pip_executable, "install", "anthropic", "openai", "python-dotenv", "google-genai", "tqdm", "pydantic", "scikit-learn", "pandas", "numpy"], check=True)
 
 # Initialize Context Manager
 logger.info("Initializing context manager...")
@@ -633,12 +633,32 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
 
         # Prepare execution status for feedback agent
         if target_agent_success:
-            execution_status = "SUCCESS: Target agent completed execution successfully."
+            # Get last 10 lines of stdout for quick preview
+            stdout_lines = target_agent_stdout.split('\n')
+            last_10_lines = '\n'.join(stdout_lines[-10:]) if len(stdout_lines) > 10 else target_agent_stdout
+
+            execution_status = f"""SUCCESS: Target agent completed execution successfully.
+
+**Last 10 lines of output**:
+```
+{last_10_lines}
+```
+
+Full logs available at: {stdout_log_file}
+"""
         else:
+            # Get last 10 lines of stdout for quick preview
+            stdout_lines = target_agent_stdout.split('\n')
+            last_10_lines = '\n'.join(stdout_lines[-10:]) if len(stdout_lines) > 10 else target_agent_stdout
+
             execution_status = f"""FAILED: {target_agent_error_msg}
 
-STDOUT:
-{target_agent_stdout}
+**Last 10 lines of output**:
+```
+{last_10_lines}
+```
+
+Full logs available at: {stdout_log_file}
 
 STDERR:
 {target_agent_stderr}
