@@ -3,8 +3,6 @@ Directory structure (conceptual)
 
 orchestration/
   orchestrator.py
-  feedback_agent.py
-  meta_agent.py
 
 tasks/
   task_1/
@@ -13,6 +11,8 @@ tasks/
       SAMPLE_TASK_DESCRIPTIONS.md
     data/
       public/
+        train.csv
+        test.csv
         task.md
       private/
   task_2/
@@ -32,15 +32,14 @@ runs/
     gen_1: (meta_agent, reference_target_agent) -> target_agent_1 -> gen_1
     gen_2: (feedback_agent, target_agent_1) -> target_agent_2 -> gen_2
     gen_3: (feedback_agent, target_agent_2) -> target_agent_3 -> gen_3
-  run_2/ (meta_agent, task_2)
+  run_2/ (unique meta_agent, unique feedback_agent, unique_task, reference_target_agent, config)
     gen_1: (meta_agent, reference_target_agent) -> target_agent_1 -> gen_1
     gen_2: (feedback_agent, target_agent_1) -> target_agent_2 -> gen_2
     gen_3: (feedback_agent, target_agent_2) -> target_agent_3 -> gen_3
-  run_3/ (meta_agent_2, task_2)
+  run_3/ (unique meta_agent, unique feedback_agent, unique_task, reference_target_agent, config)
     gen_1: (meta_agent, reference_target_agent) -> target_agent_1 -> gen_1
     gen_2: (feedback_agent, target_agent_1) -> target_agent_2 -> gen_2
     gen_3: (feedback_agent, target_agent_2) -> target_agent_3 -> gen_3
-
 """
 
 import os
@@ -250,7 +249,7 @@ pip_executable = os.path.join(venv_dir, "bin", "pip")
 
 # Install required packages: anthropic, python-dotenv
 logger.info("Installing required packages: anthropic, python-dotenv in the virtual environment")
-subprocess.run([pip_executable, "install", "anthropic", "python-dotenv", "google-genai", "tqdm", "pydantic"], check=True)
+subprocess.run([pip_executable, "install", "anthropic", "openai", "python-dotenv", "google-genai", "tqdm", "pydantic", "scikit-learn", "pandas", "numpy"], check=True)
 
 # Initialize Context Manager
 logger.info("Initializing context manager...")
@@ -289,13 +288,13 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 2. The target_agent.py MUST accept two command-line arguments:
    - --dataset_dir: Absolute path to the dataset directory (READ-ONLY, provided at runtime)
-   - --working_dir: Absolute path to the working directory (WRITE-ONLY, provided at runtime)
+   - --working_dir: Absolute path to the working directory (READ-WRITE, provided at runtime)
 
 3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to {task_model}. {task_model} MUST be explicitly told:
    - Where the dataset directory is located (the exact path from --dataset_dir)
    - Where the working directory is located (the exact path from --working_dir)
    - That it can ONLY READ from the dataset directory
-   - That it can ONLY WRITE to the working directory
+   - That it can READ from and WRITE to the working directory
 
    DO NOT let {task_model} search for data in random locations. The prompt must say: "The dataset is at: <actual_dataset_dir_path>"
 
@@ -634,12 +633,32 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
 
         # Prepare execution status for feedback agent
         if target_agent_success:
-            execution_status = "SUCCESS: Target agent completed execution successfully."
+            # Get last 10 lines of stdout for quick preview
+            stdout_lines = target_agent_stdout.split('\n')
+            last_10_lines = '\n'.join(stdout_lines[-10:]) if len(stdout_lines) > 10 else target_agent_stdout
+
+            execution_status = f"""SUCCESS: Target agent completed execution successfully.
+
+**Last 10 lines of output**:
+```
+{last_10_lines}
+```
+
+Full logs available at: {stdout_log_file}
+"""
         else:
+            # Get last 10 lines of stdout for quick preview
+            stdout_lines = target_agent_stdout.split('\n')
+            last_10_lines = '\n'.join(stdout_lines[-10:]) if len(stdout_lines) > 10 else target_agent_stdout
+
             execution_status = f"""FAILED: {target_agent_error_msg}
 
-STDOUT:
-{target_agent_stdout}
+**Last 10 lines of output**:
+```
+{last_10_lines}
+```
+
+Full logs available at: {stdout_log_file}
 
 STDERR:
 {target_agent_stderr}

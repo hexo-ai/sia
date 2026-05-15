@@ -179,10 +179,10 @@ def create_sample_task_descriptions(competition_id: str, tasks_dir: Path, simila
     print(f"[5/6] Creating SAMPLE_TASK_DESCRIPTIONS.md")
 
     task_dir = tasks_dir / competition_id
-    spec_dir = task_dir / "reference"
-    spec_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir = task_dir / "reference"
+    reference_dir.mkdir(parents=True, exist_ok=True)
 
-    sample_file = spec_dir / "SAMPLE_TASK_DESCRIPTIONS.md"
+    sample_file = reference_dir / "SAMPLE_TASK_DESCRIPTIONS.md"
 
     content = f"""
 {similar_tasks if similar_tasks else "No similar tasks generated."}
@@ -205,10 +205,10 @@ def copy_reference_agent(competition_id: str, tasks_dir: Path) -> bool:
         return False
 
     task_dir = tasks_dir / competition_id
-    spec_dir = task_dir / "reference"
-    spec_dir.mkdir(parents=True, exist_ok=True)
+    reference_dir = task_dir / "reference"
+    reference_dir.mkdir(parents=True, exist_ok=True)
 
-    dest_file = spec_dir / "reference_target_agent.py"
+    dest_file = reference_dir / "reference_target_agent.py"
 
     shutil.copy2(reference_file, dest_file)
     print(f"  ✓ Copied reference agent to {dest_file}")
