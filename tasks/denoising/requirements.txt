@@ -1,0 +1,10 @@
+anndata
+requests
+certifi
+scanpy
+scikit-learn
+scprep
+graphtools
+numpy
+scipy
+git+https://github.com/czbiohub-sf/molecular-cross-validation.git
