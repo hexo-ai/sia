@@ -60,20 +60,23 @@ async def run_agent_claude(model_name, max_turns, prompt, agent_working_director
                     elif hasattr(block, "name"):
                         if not logged_content:
                             turn_count += 1
-                            logger.info(f"\n{'─' * 80}")
+                            logger.info(f"\n{'─' * 40}")
                             logger.info(f"TURN {turn_count}: Tool Execution")
-                            logger.info(f"{'─' * 80}")
                             logged_content = True
 
-                        logger.info(f"🔧 Tool: {block.name}")
                         if hasattr(block, "input") and block.input:
-                            # Pretty print tool input
-                            import json
-                            try:
-                                input_str = json.dumps(block.input, indent=2)
-                                logger.info(f"   Input: {input_str}")
-                            except:
-                                logger.info(f"   Input: {block.input}")
+                            inp = block.input
+                            # For write_file, just log path + size, not full content
+                            if block.name == "write_file" and "content" in inp:
+                                summary = f"path={inp.get('path', '?')}  ({len(inp['content'])} chars)"
+                            else:
+                                import json
+                                try:
+                                    raw = json.dumps(inp)
+                                    summary = raw[:200] + "..." if len(raw) > 200 else raw
+                                except Exception:
+                                    summary = str(inp)[:200]
+                            logger.info(f"🔧 {block.name}  {summary}")
 
                     # Log tool results
                     elif hasattr(block, "type") and block.type == "tool_result":
@@ -102,6 +105,34 @@ async def run_agent_claude(model_name, max_turns, prompt, agent_working_director
         raise
 
 
+def _silence_openhands():
+    """Mute all OpenHands SDK loggers and return a context manager that also
+    redirects stdout/stderr at the OS file-descriptor level."""
+    import logging, os, contextlib
+
+    # Kill every logger whose name starts with 'openhands'
+    for name in list(logging.Logger.manager.loggerDict):
+        if name.startswith("openhands"):
+            logging.getLogger(name).setLevel(logging.CRITICAL)
+            logging.getLogger(name).handlers.clear()
+            logging.getLogger(name).propagate = False
+
+    @contextlib.contextmanager
+    def _fd_silence():
+        devnull = open(os.devnull, "w")
+        old_out, old_err = os.dup(1), os.dup(2)
+        os.dup2(devnull.fileno(), 1)
+        os.dup2(devnull.fileno(), 2)
+        try:
+            yield
+        finally:
+            os.dup2(old_out, 1); os.close(old_out)
+            os.dup2(old_err, 2); os.close(old_err)
+            devnull.close()
+
+    return _fd_silence()
+
+
 async def run_agent_openhands(model_name, max_turns, prompt, agent_working_directory):
     """Run agent using OpenHands SDK"""
     try:
@@ -112,82 +143,42 @@ async def run_agent_openhands(model_name, max_turns, prompt, agent_working_direc
         logger.error("OpenHands SDK not installed. Install with: pip install openhands-ai")
         raise
 
-    logger.info("=" * 80)
-    logger.info(f"Starting OpenHands agent execution with {model_name} model")
-    logger.info(f"Working directory: {agent_working_directory}")
-    logger.info(f"Max turns: {max_turns}")
-    logger.info("=" * 80)
-
-    turn_count = 0
+    logger.info(f"Starting OpenHands agent  model={model_name}  dir={agent_working_directory}")
     start_time = datetime.now()
+    trajectory_dir = os.path.join(agent_working_directory, "openhands_trajectory")
+
+    # Determine API key based on model provider
+    m = model_name.lower()
+    if "claude" in m or "anthropic" in m:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+    elif "gemini" in m or "google" in m:
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+    elif "gpt" in m or "openai" in m:
+        api_key = os.getenv("OPENAI_API_KEY")
+    else:
+        api_key = os.getenv("LLM_API_KEY")
 
     try:
-        # Determine API key based on model provider
-        api_key = None
-        if "claude" in model_name.lower() or "anthropic" in model_name.lower():
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-        elif "gemini" in model_name.lower() or "google" in model_name.lower():
-            api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        elif "gpt" in model_name.lower() or "openai" in model_name.lower():
-            api_key = os.getenv("OPENAI_API_KEY")
-        else:
-            # Fallback to generic LLM_API_KEY
-            api_key = os.getenv("LLM_API_KEY")
+        # Silence all SDK output (loggers + OS-level fds) for the entire block
+        with _silence_openhands():
+            llm = LLM(model=model_name, api_key=api_key)
+            agent = Agent(
+                llm=llm,
+                tools=[Tool(name=TerminalTool.name), Tool(name=FileEditorTool.name)],
+            )
+            conversation = Conversation(
+                agent=agent,
+                workspace=agent_working_directory,
+                persistence_dir=trajectory_dir,
+            )
+            conversation.send_message(prompt)
+            result = conversation.run()
 
-        if not api_key:
-            logger.warning(f"No API key found for model {model_name}. Using LLM_API_KEY if available.")
-            api_key = os.getenv("LLM_API_KEY")
-
-        # Create LLM instance
-        llm = LLM(
-            model=model_name,
-            api_key=api_key,
-        )
-
-        # Create agent with available tools
-        agent = Agent(
-            llm=llm,
-            tools=[
-                Tool(name=TerminalTool.name),
-                Tool(name=FileEditorTool.name),
-            ],
-        )
-
-        # Create conversation with workspace and persistence
-        # Trajectory will be saved in: agent_working_directory/openhands_trajectory/
-        trajectory_dir = os.path.join(agent_working_directory, "openhands_trajectory")
-
-        conversation = Conversation(
-            agent=agent,
-            workspace=agent_working_directory,
-            persistence_dir=trajectory_dir
-        )
-
-        # Send the task prompt
-        logger.info(f"\n{'─' * 80}")
-        logger.info(f"TURN {turn_count + 1}: Sending prompt to agent")
-        logger.info(f"{'─' * 80}")
-        conversation.send_message(prompt)
-
-        # Run the agent
-        logger.info(f"Running agent (max turns: {max_turns})...")
-        logger.info(f"  → Trajectory will be saved to: {trajectory_dir}")
-        result = conversation.run()
-
-        # Log completion
-        elapsed_time = (datetime.now() - start_time).total_seconds()
-        logger.info(f"\n{'=' * 80}")
-        logger.info(f"EXECUTION COMPLETE")
-        logger.info(f"{'=' * 80}")
-        logger.info(f"Execution time: {elapsed_time:.2f} seconds")
-        logger.info(f"Final result: {result}")
-        logger.info(f"  ✓ Trajectory saved to: {trajectory_dir}")
-        logger.info(f"{'=' * 80}")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.info(f"OpenHands agent done in {elapsed:.1f}s  trajectory → {trajectory_dir}")
 
     except Exception as e:
-        logger.error(f"\n{'!' * 80}")
-        logger.error(f"ERROR: {str(e)}")
-        logger.error(f"{'!' * 80}", exc_info=True)
+        logger.error(f"OpenHands ERROR: {e}", exc_info=True)
         raise
 
 

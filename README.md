@@ -34,30 +34,52 @@ This iterative process allows the system to autonomously refine and enhance its 
 ```
 sia/
 ├── orchestration/
-│   ├── orchestrator.py           # Main orchestration logic
-│   ├── meta_agent.py             # Meta-agent implementation
-│   ├── feedback_agent.py         # Feedback agent implementation
-│   └── prepare_mlebench_dataset.py    # Dataset preparation script
+│   ├── orchestrator.py             # Main loop: meta-agent → target agent → feedback agent
+│   │                               # The meta-agent and feedback-agent prompts live here —
+│   │                               # there are no separate meta_agent.py / feedback_agent.py files
+│   ├── util.py                     # run_agent(): Claude Code SDK and OpenHands backends
+│   ├── context_manager.py          # Tracks scores and evolution across generations
+│   ├── plot_utils.py               # Plots private scores at end of run
+│   └── prepare_mlebench_dataset.py # Helper to bootstrap MLE-Bench tasks
 ├── tasks/
 │   ├── _shared/
-│   │   ├── reference_target_agent.py
-│   │   └── sample_agent_execution.json
+│   │   ├── reference_target_agent.py    # Generic reference agent template
+│   │   └── sample_agent_execution.json  # Example trajectory shown to meta-agent
 │   └── {task-id}/
 │       ├── data/
-│       │   ├── public/           # Public dataset
-│       │   │   ├── task.md           # Task description
-│       │   │   └── *.csv             # Data files
-│       │   └── private/          # Private dataset
-│       └── reference/
-│           ├── SAMPLE_TASK_DESCRIPTIONS.md
-│           └── reference_target_agent.py
-└── runs/                         # Generated during execution
+│       │   ├── public/
+│       │   │   ├── task.md          # Task description (read by meta-agent and target agent)
+│       │   │   ├── evaluate.py      # Public evaluator — called by the target agent to score
+│       │   │   │                    # its solution; writes results.json next to solution file
+│       │   │   └── ...              # Public data files (read-only for target agent)
+│       │   ├── private/
+│       │   │   └── evaluate.py      # Private evaluator — called by the orchestrator only,
+│       │   │                        # never exposed to the target agent; writes private_result.json
+│       │   └── .gitignore           # (optional) exclude large data files (e.g. *.h5ad) from git
+│       ├── reference/
+│       │   ├── SAMPLE_TASK_DESCRIPTIONS.md  # Example tasks shown to meta-agent for context
+│       │   └── reference_target_agent.py    # Task-specific reference agent shown as template
+│       ├── requirements.txt         # (optional) task-specific Python dependencies installed
+│       │                            # automatically into the run venv before the first generation
+│       ├── download_data.sh         # (optional) downloads / prepares data files into data/public/
+│       │                            # and data/private/; run once before launching the orchestrator
+│       └── launch.sh                # (optional) convenience wrapper around orchestrator.py
+└── runs/                         # Generated during execution (not committed)
     └── run_{id}/
-        ├── venv/                 # Isolated Python environment
-        └── gen_{n}/              # Each generation's artifacts
-            ├── target_agent.py
-            ├── agent_execution.json
-            └── improvement.md    # (from gen_2 onwards)
+        ├── venv/                 # Isolated Python environment (auto-created per run)
+        ├── context.md            # Score history and evolution summary across generations
+        ├── private_scores.png    # (end of run) private score curve + public as reference
+        └── gen_{n}/
+            ├── target_agent.py            # Agent code for this generation
+            ├── agent_execution.json       # Full execution trajectory (target agent)
+            ├── target_agent_stdout.log    # Combined stdout+stderr of the target agent process
+            ├── results.json               # Public eval score (written by evaluate.py)
+            ├── private_result.json        # Private eval score (written by orchestrator, display only)
+            ├── improvement.md             # (gen 2+) feedback agent's analysis and plan
+            ├── meta_agent_prompt.txt      # (gen 1) full prompt sent to meta-agent
+            ├── feedback_agent_prompt.txt  # (gen 2+) full prompt sent to feedback agent
+            └── openhands_trajectory/      # (OpenHands backend) meta/feedback agent trajectory
+                                           # (Claude backend) trajectories go to ~/.claude/projects/
 ```
 
 ## Setup
@@ -208,22 +230,62 @@ diff runs/run_1/gen_1/target_agent.py runs/run_1/gen_2/target_agent.py
 
 ## Task Requirements
 
-Each task directory must follow this structure:
+Only three files are strictly required. Everything else is optional.
 
 ```
 tasks/{task-id}/
 ├── data/
 │   ├── public/
-│   │   ├── task.md                    # Task description (orchestrator reads this)
-│   │   ├── train.csv
-│   │   ├── test.csv
-│   │   └── sample_submission.csv
+│   │   ├── task.md        ← required: task description
+│   │   └── evaluate.py    ← required: public evaluator
 │   └── private/
-│       └── ...                        # Private evaluation data
+│       └── evaluate.py    ← required: private evaluator
 └── reference/
-    ├── SAMPLE_TASK_DESCRIPTIONS.md    # Similar tasks (for meta-agent context)
-    └── reference_target_agent.py      # Template agent structure
+    └── reference_target_agent.py   ← required: reference agent template
 ```
+
+### Required files
+
+**`data/public/task.md`** — read by the meta-agent and injected verbatim into the target agent's prompt. Describe the task, data format, scoring, and any constraints.
+
+**`data/public/evaluate.py`** — called by the target agent during its improvement loop to score its solution.
+- Must write `results.json` next to the solution file. Required keys:
+  ```jsonc
+  {
+    "score": 0.87,           // numeric score for this generation
+    "accuracy": 0.87,        // same value; read by context_manager to track progress
+    "lower_is_better": false, // tells the plot which direction is better
+    "error": null            // null on success, error string on failure
+  }
+  ```
+
+**`data/private/evaluate.py`** — called by the orchestrator after each generation, never exposed to the target agent.
+- Must accept `--gen-dir <path>`. The evaluator finds task artifacts (e.g. `solution.py`) inside that directory.
+- Must write `private_result.json` to `<gen-dir>/private_result.json`. Required keys:
+  ```jsonc
+  {
+    "score": 0.87,           // numeric score
+    "lower_is_better": false, // tells the plot which direction is better
+    "error": null            // null on success, error string on failure
+  }
+  ```
+  The orchestrator reads both `results.json` and `private_result.json` to produce `scores.png`, which overlays the public and private score curves across generations — making it easy to spot overfitting (public improves while private does not).
+
+**`reference/reference_target_agent.py`** — shown verbatim to the meta-agent as a concrete implementation pattern. Use the task-specific version for tasks with unusual scaffolding requirements (e.g. no tool calls, custom eval loop).
+
+### Optional files
+
+**`reference/SAMPLE_TASK_DESCRIPTIONS.md`** — additional task examples shown to the meta-agent for context. Helps the meta-agent generalise its scaffold rather than overfit to the specific task.
+
+**`requirements.txt`** — task-specific Python dependencies (e.g. `anndata`, `scanpy`). Automatically installed into the run's venv before generation 1. Avoids polluting the base requirements.
+
+**`data/.gitignore`** — exclude large data files from git (e.g. `*.h5ad`, `*.csv`). Data files are generated locally by `download_data.sh` and should not be committed.
+
+**`download_data.sh`** — downloads and prepares data files into `data/public/` and `data/private/`. Run once before the first orchestrator launch. Keeps binary data out of the repo while making setup reproducible.
+
+**`launch.sh`** — convenience wrapper around `orchestrator.py` with task-specific defaults (models, generation count, run ID).
+
+> **Scientific validity**: the private evaluator must never be reachable by the target agent. The orchestrator only passes `data/public/` via `--dataset_dir`. The private score is logged for experimenter observability only — it must never be fed back as a training signal. If private score diverges from public score across generations, the agent is overfitting to the public eval set.
 
 ------
 
@@ -240,7 +302,7 @@ This will:
 2. Copy public and private datasets from `~/.cache/mle-bench/data/prepared/`
 3. Rename `description.md` to `task.md` in `data/public/`
 4. Use Gemini to generate similar tasks (optional)
-5. Create `SAMPLE_TASK_DESCRIPTIONS.md` in `reference/`
+5. *(Optional)* Create `SAMPLE_TASK_DESCRIPTIONS.md` in `reference/`
 6. Copy `reference_target_agent.py` from `_shared/` to `reference/`
 
 **Options:**

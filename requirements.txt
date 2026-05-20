@@ -6,3 +6,4 @@ scikit-learn==1.8.0
 git+https://github.com/openai/mle-bench
 google-generativeai==0.8.6
 python-dotenv==1.2.2
+matplotlib

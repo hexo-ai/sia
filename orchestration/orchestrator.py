@@ -187,6 +187,31 @@ else:
 
 task_model = args.task_model
 
+
+def _required_api_key(model: str) -> tuple[str, list[str]]:
+    """Return (description, [candidate env var names]) for a given model string."""
+    m = model.lower()
+    if any(m.startswith(p) for p in ("gemini/", "google/")):
+        return "Gemini / Google", ["GEMINI_API_KEY", "GOOGLE_API_KEY"]
+    if "gpt-oss" in m or "tinker" in m:
+        return "Tinker", ["TINKER_API_KEY"]
+    if any(m.startswith(p) for p in ("claude", "anthropic/")):
+        return "Anthropic", ["ANTHROPIC_API_KEY"]
+    return "OpenAI", ["OPENAI_API_KEY"]
+
+
+def _check_api_key(model: str) -> None:
+    provider, candidates = _required_api_key(model)
+    missing = [k for k in candidates if not os.environ.get(k)]
+    if len(missing) == len(candidates):
+        key_list = " or ".join(candidates)
+        logger.error(f"Model '{model}' requires {provider} credentials — set {key_list}")
+        sys.exit(1)
+
+
+_check_api_key(meta_model)
+_check_api_key(task_model)
+
 logger.info(f"Configuration:")
 logger.info(f"  - Maximum generations: {max_gen}")
 logger.info(f"  - Task directory: {task_dir}")
@@ -202,7 +227,11 @@ logger.info(f"  - Task-agent model: {task_model}")
 
 logger.info("Loading files from task directory...")
 
-SAMPLE_TASK_DESCRIPTIONS = open(os.path.join(task_dir, "reference/SAMPLE_TASK_DESCRIPTIONS.md")).read()
+try:
+    SAMPLE_TASK_DESCRIPTIONS = open(os.path.join(task_dir, "reference/SAMPLE_TASK_DESCRIPTIONS.md")).read()
+except FileNotFoundError:
+    SAMPLE_TASK_DESCRIPTIONS = ""
+    logger.warning("  ⚠ reference/SAMPLE_TASK_DESCRIPTIONS.md not found — proceeding without sample descriptions")
 logger.info("  ✓ Sample task descriptions loaded")
 
 REFERENCE_TARGET_AGENT_PY = open(os.path.join(task_dir, "reference/reference_target_agent.py")).read()
@@ -242,14 +271,30 @@ import subprocess
 
 venv_dir = os.path.join(RUN_DIRECTORY, "venv")
 logger.info(f"Creating virtual environment at: {venv_dir}")
-venv.create(venv_dir, with_pip=True)
+uv_available = subprocess.run(["which", "uv"], capture_output=True).returncode == 0
+if uv_available:
+    subprocess.run(["uv", "venv", "--python", "3.12", venv_dir], check=True)
+else:
+    venv.create(venv_dir, with_pip=True)
 
 # Path to the pip executable inside the venv
 pip_executable = os.path.join(venv_dir, "bin", "pip")
+def pip_install(args):
+    if uv_available:
+        subprocess.run(["uv", "pip", "install", "--python", pip_executable.replace("/bin/pip", "/bin/python")] + args, check=True)
+    else:
+        subprocess.run([pip_executable, "install"] + args, check=True)
 
-# Install required packages: anthropic, python-dotenv
-logger.info("Installing required packages: anthropic, python-dotenv in the virtual environment")
-subprocess.run([pip_executable, "install", "anthropic", "openai", "python-dotenv", "google-genai", "tqdm", "pydantic", "scikit-learn", "pandas", "numpy"], check=True)
+# Install required packages
+logger.info(f"Installing required packages ({'uv pip' if uv_available else 'pip'})")
+pip_install(["anthropic", "openai", "python-dotenv", "google-genai", "tqdm", "pydantic", "scikit-learn", "pandas", "numpy", "litellm"])
+
+# Install task-specific requirements if present (e.g. tasks/denoising/requirements.txt)
+task_requirements = os.path.join(task_dir, "requirements.txt")
+if os.path.exists(task_requirements):
+    logger.info(f"Installing task-specific requirements from: {task_requirements}")
+    pip_install(["-r", task_requirements])
+    logger.info("  ✓ Task requirements installed")
 
 # Initialize Context Manager
 logger.info("Initializing context manager...")
@@ -329,6 +374,8 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 6. Do NOT attempt to write to or modify files inside the dataset directory. It is READ-ONLY.
 7. The target_agent.py should use only the "{task_model}" model when invoking the language model (do not use any other model).
+   This model requires the following environment variable(s) for authentication: {_required_api_key(task_model)[1]}.
+   Read that variable from os.environ in your target_agent.py — do not hardcode any API key.
 8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to {task_model} in the prompt.
 
 Example invocation (paths will vary at runtime):
@@ -560,6 +607,18 @@ for current_gen in range(1, max_gen + 1):
         }
     )
 
+    # Private test score — logged for observability only, never fed back as a signal
+    private_eval = os.path.join(task_dir, "data/private/evaluate.py")
+    if os.path.exists(private_eval):
+        logger.info(f"  [private] Scoring gen_{current_gen} on private test set (display only — never fed back as signal)...")
+        subprocess.run([python_exec, private_eval, "--gen-dir", current_gen_directory], check=False)
+        private_result_path = os.path.join(current_gen_directory, "private_result.json")
+        if os.path.exists(private_result_path):
+            with open(private_result_path) as f:
+                private_result = json.load(f)
+            direction = "lower" if private_result.get("lower_is_better") else "higher"
+            logger.info(f"  [private] gen_{current_gen} private result: {private_result} ({direction} is better)")
+
     # ========================
     # SECTION 5b: Run Feedback Agent (if not the last generation)
     # ========================
@@ -709,6 +768,11 @@ STDERR:
 # Finalize context with summary statistics
 logger.info("Finalizing context.md with summary statistics...")
 context_mgr.finalize()
+
+from plot_utils import plot_private_scores
+plot_path = plot_private_scores(RUN_DIRECTORY, task_name=os.path.basename(task_dir))
+if plot_path:
+    logger.info(f"Plot saved to: {plot_path}")
 
 logger.info(f"=" * 80)
 logger.info(f"Orchestrator completed all {max_gen} generations successfully!")
