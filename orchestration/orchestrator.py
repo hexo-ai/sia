@@ -43,8 +43,11 @@ runs/
 """
 
 import os
+import re
 import sys
 import json
+import shutil
+import signal
 import asyncio
 import logging
 import argparse
@@ -55,6 +58,7 @@ from datetime import datetime
 
 from util import run_agent
 from context_manager import ContextManager
+from model_guidelines import get_guidelines
 
 # Configure logging
 logging.basicConfig(
@@ -68,6 +72,66 @@ logger = logging.getLogger(__name__)
 # ========================
 # HELPER FUNCTIONS
 # ========================
+
+# Tracks the currently running subprocess so SIGINT/SIGTERM can kill it cleanly.
+_current_proc: "subprocess.Popen | None" = None
+
+
+def _kill_current_proc() -> None:
+    global _current_proc
+    if _current_proc is None:
+        return
+    try:
+        os.killpg(os.getpgid(_current_proc.pid), signal.SIGKILL)
+        _current_proc.wait(timeout=3)
+    except (ProcessLookupError, OSError, subprocess.TimeoutExpired, ChildProcessError):
+        pass
+    _current_proc = None
+
+
+def _signal_handler(signum, frame):
+    logger.warning(f"Received signal {signum} — killing subprocess and exiting.")
+    _kill_current_proc()
+    sys.exit(1)
+
+
+signal.signal(signal.SIGINT,  _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+
+
+def _run_with_timeout(command: str, timeout: int) -> tuple[int, bool]:
+    """Run a shell command, killing the entire process group on timeout.
+
+    Returns (return_code, timed_out).  Using start_new_session=True ensures
+    bash and all its children (python agent, tee, etc.) share one process group
+    so os.killpg reaches every orphan.
+    """
+    global _current_proc
+    proc = subprocess.Popen(
+        command,
+        shell=True,
+        executable="/bin/bash",
+        text=True,
+        start_new_session=True,
+    )
+    _current_proc = proc
+    try:
+        proc.wait(timeout=timeout)
+        _current_proc = None
+        return proc.returncode, False
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            proc.wait(timeout=5)
+        except (subprocess.TimeoutExpired, ProcessLookupError):
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=2)
+            except (ProcessLookupError, ChildProcessError):
+                pass
+        _current_proc = None
+        return proc.returncode or -1, True
+
 
 def load_agent_execution(gen_directory):
     """
@@ -167,7 +231,20 @@ parser.add_argument('--task_dir', type=str, required=True, help='Path to the tas
 parser.add_argument('--meta_model', type=str, default=None, help='Model to use for meta-agent (default: haiku for claude backend, gemini/gemini-3.1-pro-preview for openhands backend)')
 parser.add_argument('--task_model', type=str, default='claude-haiku-4-5-20251001', help='Model to use for target agent (default: claude-haiku-4-5-20251001)')
 parser.add_argument('--backend', type=str, default='claude', choices=['claude', 'openhands'], help='Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)')
+parser.add_argument('--target_agent_timeout', type=int, default=360, help='Hard time limit per generation in seconds — process is killed when exceeded (default: 360)')
+parser.add_argument('--task_model_temperature', type=float, default=0.3, help='Sampling temperature for the task model (default: 0.3)')
+parser.add_argument('--max_turns', type=int, default=30, help='Max LLM turns per target agent run (default: 30)')
+parser.add_argument('--private_scores_task_models', type=str, default='',
+                    help='Comma-separated models for private scoring (e.g. "openai/gpt-oss-120b,claude/..."). '
+                         'Each model re-runs the target agent on the public dataset and evaluates on the private test set. '
+                         'Empty or absent = skip private evaluation.')
+parser.add_argument('--include_gen0', action='store_true', help='Run generation 0 using the reference_target_agent.py as-is, skipping the meta-agent entirely')
 args = parser.parse_args()
+
+# Deduplicated list of models for private scoring; empty list = skip
+private_score_models: list[str] = list(dict.fromkeys(
+    m.strip() for m in (args.private_scores_task_models or "").split(",") if m.strip()
+))
 
 max_gen = args.max_gen
 task_dir = args.task_dir
@@ -248,7 +325,7 @@ logger.info("  ✓ Task specification loaded")
 # SECTION 2: Setup Run Directories
 # ========================
 
-gen_num = 1
+gen_num = 0 if args.include_gen0 else 1
 RUN_DIRECTORY = f"./runs/run_{run_id}"
 META_AGENT_WORKING_DIRECTORY = os.path.abspath(f"{RUN_DIRECTORY}/gen_{gen_num}")
 FEEDBACK_AGENT_WORKING_DIRECTORY = META_AGENT_WORKING_DIRECTORY
@@ -285,9 +362,10 @@ def pip_install(args):
     else:
         subprocess.run([pip_executable, "install"] + args, check=True)
 
-# Install required packages
-logger.info(f"Installing required packages ({'uv pip' if uv_available else 'pip'})")
-pip_install(["anthropic", "openai", "python-dotenv", "google-genai", "tqdm", "pydantic", "scikit-learn", "pandas", "numpy", "litellm"])
+# Install base packages from _shared/base_requirements.txt
+base_requirements = os.path.abspath(os.path.join(task_dir, "../_shared/base_requirements.txt"))
+logger.info(f"Installing base requirements from: {base_requirements} ({'uv pip' if uv_available else 'pip'})")
+pip_install(["-r", base_requirements])
 
 # Install task-specific requirements if present (e.g. tasks/denoising/requirements.txt)
 task_requirements = os.path.join(task_dir, "requirements.txt")
@@ -313,6 +391,8 @@ logger.info("  ✓ Context manager initialized")
 # SECTION 3: Define Prompts
 # ========================
 
+TASK_MODEL_GUIDELINES = get_guidelines(task_model)
+
 META_AGENT_PROMPT = f"""You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
 
 Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve:
@@ -331,9 +411,13 @@ CRITICAL RULES - FOLLOW EXACTLY:
 
 1. The current working directory is {META_AGENT_WORKING_DIRECTORY}. Create the target_agent.py in the current working directory itself.
 
-2. The target_agent.py MUST accept two command-line arguments:
+2. The target_agent.py MUST accept these command-line arguments:
    - --dataset_dir: Absolute path to the dataset directory (READ-ONLY, provided at runtime)
    - --working_dir: Absolute path to the working directory (READ-WRITE, provided at runtime)
+   - --shared_dir: Absolute path to tasks/_shared/ — add to sys.path to import call_task_model
+   - --model: The model name to use for all LLM calls (e.g. "openai/gpt-oss-120b", "tinker://...", "claude/claude-opus-4-7")
+   - --max_turns: Maximum number of LLM turns in the tool loop (int, provided at runtime)
+   - --task_model_temperature: Sampling temperature for all call_task_model() calls (float, provided at runtime)
 
 3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to {task_model}. {task_model} MUST be explicitly told:
    - Where the dataset directory is located (the exact path from --dataset_dir)
@@ -370,17 +454,26 @@ CRITICAL RULES - FOLLOW EXACTLY:
    - Use the same format as the sample agent execution trajectory provided above
    - Include all messages, tool calls, and their results
    - Ensure valid JSON (properly close all arrays/objects)
-   - Make sure to properly close the JSON file(s) to avoid corruption
+   - **Write after every turn** (overwrite the file each time) so the log survives a crash or timeout — do NOT write only at the end of the loop
 
 6. Do NOT attempt to write to or modify files inside the dataset directory. It is READ-ONLY.
-7. The target_agent.py should use only the "{task_model}" model when invoking the language model (do not use any other model).
-   This model requires the following environment variable(s) for authentication: {_required_api_key(task_model)[1]}.
-   Read that variable from os.environ in your target_agent.py — do not hardcode any API key.
+7. The model name is passed at runtime via --model. Read it with argparse (args.model) and pass it to call_task_model().
+   Do NOT hardcode any model name. The model "{task_model}" requires the following environment variable(s) for authentication: {_required_api_key(task_model)[1]}.
+   Read that variable from os.environ — do not hardcode any API key.
 8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to {task_model} in the prompt.
+9. The target agent runs under two budget constraints:
+   - Hard time limit: passed via --target_agent_timeout — the process is killed when exceeded. Save solution.py (or equivalent output) after every improvement, not only at the end.
+   - Turn limit: --max_turns (args.max_turns) — the total number of LLM calls across ALL loops must not exceed this value. If your agent has nested loops (e.g. outer retry loop + inner tool loop), track a single shared counter and stop when it reaches args.max_turns. Do NOT hardcode a turn count.
+   - Inject a per-turn status message (user role) at each turn telling the model how many turns and seconds remain. Do NOT put static budget numbers in the developer/system message — they become stale immediately.
+   - When the budget is exhausted, exit cleanly (exit code 0) with a warning log. Do NOT call sys.exit(1) — the orchestrator interprets that as a crash, not a normal completion.
 
 Example invocation (paths will vary at runtime):
-    python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working
-"""
+    python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working --shared_dir /path/to/_shared --model {task_model} --max_turns {args.max_turns}
+{"" if not TASK_MODEL_GUIDELINES else f"""
+---
+{TASK_MODEL_GUIDELINES}
+---
+"""}"""
 
 FEEDBACK_AGENT_PROMPT = """You are an expert AI Engineer analyzing agent scaffolds for iterative improvement.
 
@@ -388,15 +481,21 @@ FEEDBACK_AGENT_PROMPT = """You are an expert AI Engineer analyzing agent scaffol
 - Current generation: {CURRENT_GEN}
 - Previous generations: {PREVIOUS_GENS}
 - Evolution history: {CONTEXT_MD_PATH}
+- Current generation directory (read-only): {CURRENT_GEN_DIR}
+- Hard time limit per run: **{TARGET_AGENT_TIMEOUT}s** — the process is killed when exceeded
 
 **BEFORE ANALYZING - READ THE FULL HISTORY**:
 1. Read {CONTEXT_MD_PATH} to understand:
    - What improvements were tried in each previous generation
    - Performance trends across generations
    - What worked and what didn't work
-2. Review previous improvement.md files from earlier generations if helpful
-3. Don't repeat failed approaches from earlier generations
-4. Build upon successful patterns that improved performance
+2. If you need more context beyond what is provided below, browse {CURRENT_GEN_DIR}/ freely:
+   - Any output files produced by the agent (e.g. solution.py, predictions, models)
+   - target_agent_stdout.log for the full execution output
+   - Earlier generation directories are also accessible (gen_0/, gen_1/, ...)
+3. Review previous improvement.md files from earlier generations if helpful
+4. Don't repeat failed approaches from earlier generations
+5. Build upon successful patterns that improved performance
 
 ---
 
@@ -418,6 +517,11 @@ FEEDBACK_AGENT_PROMPT = """You are an expert AI Engineer analyzing agent scaffol
 **EXECUTION STATUS**:
 ```
 {EXECUTION_STATUS}
+```
+
+**EVALUATION RESULT** (score achieved by the solution):
+```json
+{RESULTS_JSON}
 ```
 
 **EXECUTION LOGS**:
@@ -467,8 +571,11 @@ Follow these steps:
 - Consider error handling, logging mechanisms, and robustness
 - Build upon successful patterns from previous generations (check context.md)
 - If execution log shows errors or is incomplete, suggest improvements to ensure proper logging
+- **Write agent_execution.json after every turn** (overwrite each time), not only at the end — so the log survives a crash or timeout
+- **Hard time limit is {TARGET_AGENT_TIMEOUT}s**: the agent process is killed when exceeded. The agent must save its best solution to disk after every improvement, not only at the end. It must also budget its turns so it doesn't run indefinitely — stop iterating and write the final solution before the timeout hits.
 
 NOTE: The agent execution log may be incomplete or contain errors if the target agent crashed. If you see an "error" field, focus on making the agent more robust to prevent such failures.
+{TASK_MODEL_GUIDELINES_SECTION}
 """
 
 
@@ -476,19 +583,26 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
 # SECTION 4: Run Target Agent Creation (Meta-Agent)
 # ========================
 
-# Save the meta-agent prompt for debugging/transparency
-meta_agent_prompt_path = os.path.join(META_AGENT_WORKING_DIRECTORY, "meta_agent_prompt.txt")
-with open(meta_agent_prompt_path, 'w', encoding='utf-8') as f:
-    f.write(META_AGENT_PROMPT)
-logger.info(f"  ✓ Saved meta-agent prompt to: {meta_agent_prompt_path}")
+if args.include_gen0:
+    import shutil
+    reference_agent_src = os.path.join(task_dir, "reference/reference_target_agent.py")
+    reference_agent_dst = os.path.join(META_AGENT_WORKING_DIRECTORY, "target_agent.py")
+    shutil.copy(reference_agent_src, reference_agent_dst)
+    logger.info(f"  ✓ Gen 0: copied reference_target_agent.py → gen_0/target_agent.py (no meta-agent)")
+else:
+    # Save the meta-agent prompt for debugging/transparency
+    meta_agent_prompt_path = os.path.join(META_AGENT_WORKING_DIRECTORY, "meta_agent_prompt.txt")
+    with open(meta_agent_prompt_path, 'w', encoding='utf-8') as f:
+        f.write(META_AGENT_PROMPT)
+    logger.info(f"  ✓ Saved meta-agent prompt to: {meta_agent_prompt_path}")
 
-asyncio.run(run_agent(
-    model_name=meta_model,
-    max_turns="20",
-    prompt=META_AGENT_PROMPT,
-    agent_working_directory=META_AGENT_WORKING_DIRECTORY,
-    backend=backend
-))
+    asyncio.run(run_agent(
+        model_name=meta_model,
+        max_turns="20",
+        prompt=META_AGENT_PROMPT,
+        agent_working_directory=META_AGENT_WORKING_DIRECTORY,
+        backend=backend
+    ))
 
 
 # ========================
@@ -500,11 +614,15 @@ from pathlib import Path
 # Define the dataset directory and working directory to pass as arguments
 DATASET_DIRECTORY = os.path.join(task_dir, "data/public")
 ABS_DATASET_DIRECTORY = os.path.abspath(DATASET_DIRECTORY)
+ABS_SHARED_DIRECTORY  = os.path.abspath(os.path.join(task_dir, "../_shared"))
 logger.info(f"Dataset directory: {ABS_DATASET_DIRECTORY}")
+logger.info(f"Shared directory:  {ABS_SHARED_DIRECTORY}")
 
 # Run the loop for max_gen generations
-# gen_1 is already created by meta-agent, so we loop from gen_1 to max_gen
-for current_gen in range(1, max_gen + 1):
+# With --include_gen0: loop starts at 0 (reference agent), feedback creates gen_1+
+# Without: meta-agent already created gen_1, loop starts at 1
+loop_start = 0 if args.include_gen0 else 1
+for current_gen in range(loop_start, max_gen + 1):
     logger.info(f"=" * 80)
     logger.info(f"Starting Generation {current_gen} of {max_gen}")
     logger.info(f"=" * 80)
@@ -537,55 +655,53 @@ for current_gen in range(1, max_gen + 1):
 
     # Run target agent with real-time output using shell redirection
     try:
-        # Build command with tee for real-time display and logging
-        # Use PIPEFAIL to catch failures in the python command, not just tee
         python_exec = os.path.join(venv_dir, "bin", "python")
-        command = f"set -o pipefail; {python_exec} -u {target_agent_path} --dataset_dir {ABS_DATASET_DIRECTORY} --working_dir {current_gen_directory} 2>&1 | tee {stdout_log_file}"
-
-        # Run with shell=True and bash to enable pipefail
-        result = subprocess.run(
-            command,
-            shell=True,
-            text=True,
-            executable='/bin/bash'  # Use bash to support pipefail
+        command = (
+            f"set -o pipefail; {python_exec} -u {target_agent_path} "
+            f"--dataset_dir {ABS_DATASET_DIRECTORY} "
+            f"--working_dir {current_gen_directory} "
+            f"--shared_dir {ABS_SHARED_DIRECTORY} "
+            f"--model {task_model} "
+            f"--max_turns {args.max_turns} "
+            f"--target_agent_timeout {args.target_agent_timeout} "
+            f"--task_model_temperature {args.task_model_temperature} "
+            f"2>&1 | tee {stdout_log_file}"
         )
 
-        return_code = result.returncode
+        return_code, timed_out = _run_with_timeout(command, args.target_agent_timeout)
 
-        # Read captured output from file for feedback agent
-        with open(stdout_log_file, 'r') as f:
-            target_agent_stdout = f.read()
-        # Since we're using 2>&1, stderr is merged into stdout
+        try:
+            with open(stdout_log_file) as f:
+                target_agent_stdout = f.read()
+        except Exception:
+            pass
         target_agent_stderr = ""
 
-        logger.info(f"=" * 60)
-
-        # Check if execution was successful
-        if return_code != 0:
+        if timed_out:
             target_agent_success = False
-            target_agent_error_msg = f"Target agent failed with exit code {return_code}"
-            logger.error(f"  ✗ Target agent execution failed with exit code {return_code}")
-            logger.warning(f"  → Continuing with feedback agent despite target agent failure")
+            target_agent_error_msg = f"TIMEOUT — killed after {args.target_agent_timeout}s"
+            logger.warning(f"  ⏱ Target agent timed out after {args.target_agent_timeout}s")
+        elif return_code != 0:
+            target_agent_success = False
+            target_agent_error_msg = f"FAILED (exit code {return_code})"
+            logger.error(f"  ✗ Target agent failed with exit code {return_code}")
         else:
             target_agent_success = True
-            logger.info(f"  ✓ Generation {current_gen} target agent execution completed successfully")
+            logger.info(f"  ✓ Generation {current_gen} completed successfully")
 
     except FileNotFoundError:
-        logger.error(f"  ✗ Target agent file not found: {target_agent_path}")
-        logger.error(f"  → Cannot continue. Exiting.")
+        logger.error(f"  ✗ Target agent not found: {target_agent_path}")
         sys.exit(1)
+
     except Exception as e:
         target_agent_success = False
-        target_agent_error_msg = f"Unexpected error during target agent execution: {str(e)}"
+        target_agent_error_msg = f"FAILED — {e}"
         logger.error(f"  ✗ {target_agent_error_msg}")
-        logger.warning(f"  → Continuing with feedback agent despite target agent failure")
-
-        # Try to read any partial logs
         try:
-            with open(stdout_log_file, 'r') as f:
+            with open(stdout_log_file) as f:
                 target_agent_stdout = f.read()
-        except:
-            pass  # If log files don't exist, keep empty strings
+        except Exception:
+            pass
 
     # Calculate execution duration
     generation_duration = time.time() - generation_start_time
@@ -607,17 +723,56 @@ for current_gen in range(1, max_gen + 1):
         }
     )
 
-    # Private test score — logged for observability only, never fed back as a signal
+    # Private test scores — one run per model, display only, never fed back as signal.
+    # Kept outside gen_N/ so the feedback agent cannot read them.
     private_eval = os.path.join(task_dir, "data/private/evaluate.py")
-    if os.path.exists(private_eval):
-        logger.info(f"  [private] Scoring gen_{current_gen} on private test set (display only — never fed back as signal)...")
-        subprocess.run([python_exec, private_eval, "--gen-dir", current_gen_directory], check=False)
-        private_result_path = os.path.join(current_gen_directory, "private_result.json")
-        if os.path.exists(private_result_path):
-            with open(private_result_path) as f:
-                private_result = json.load(f)
-            direction = "lower" if private_result.get("lower_is_better") else "higher"
-            logger.info(f"  [private] gen_{current_gen} private result: {private_result} ({direction} is better)")
+    if private_score_models and os.path.exists(private_eval):
+        for priv_model in private_score_models:
+            model_slug = re.sub(r"[^\w-]", "_", priv_model)[:40]
+            priv_work_dir = os.path.abspath(
+                os.path.join(RUN_DIRECTORY, "private_scores", f"gen_{current_gen}", model_slug)
+            )
+            os.makedirs(priv_work_dir, exist_ok=True)
+
+            if priv_model == task_model:
+                # Task model already ran — copy solution.py to private dir and evaluate there
+                priv_solution_src = os.path.join(current_gen_directory, "solution.py")
+                if not os.path.exists(priv_solution_src):
+                    logger.warning(f"  [private] No solution.py in gen_{current_gen} — skipping {priv_model}")
+                    continue
+                shutil.copy(priv_solution_src, os.path.join(priv_work_dir, "solution.py"))
+                logger.info(f"  [private] gen_{current_gen} — evaluating existing solution for task_model: {priv_model}")
+            else:
+                # Different model: re-run the agent in the private dir
+                priv_command = (
+                    f"set -o pipefail; {python_exec} -u {target_agent_path} "
+                    f"--dataset_dir {ABS_DATASET_DIRECTORY} "
+                    f"--working_dir {priv_work_dir} "
+                    f"--shared_dir {ABS_SHARED_DIRECTORY} "
+                    f"--model {priv_model} "
+                    f"--max_turns {args.max_turns} "
+                    f"--target_agent_timeout {args.target_agent_timeout} "
+                    f"--task_model_temperature {args.task_model_temperature} "
+                    f"2>&1"
+                )
+                logger.info(f"  [private] gen_{current_gen} — running agent with model: {priv_model}")
+                _, priv_timed_out = _run_with_timeout(priv_command, args.target_agent_timeout)
+                if priv_timed_out:
+                    logger.warning(f"  [private] Agent timed out for {priv_model}")
+                if not os.path.exists(os.path.join(priv_work_dir, "solution.py")):
+                    logger.warning(f"  [private] No solution.py generated by {priv_model} — skipping private eval")
+                    continue
+
+            _run_with_timeout(
+                f"{python_exec} {private_eval} --gen-dir {priv_work_dir}",
+                args.target_agent_timeout,
+            )
+            priv_result_path = os.path.join(priv_work_dir, "private_result.json")
+            if os.path.exists(priv_result_path):
+                with open(priv_result_path) as f:
+                    priv_result = json.load(f)
+                direction = "lower" if priv_result.get("lower_is_better") else "higher"
+                logger.info(f"  [private] {priv_model}: score={priv_result.get('score'):.4f} ({direction} is better)")
 
     # ========================
     # SECTION 5b: Run Feedback Agent (if not the last generation)
@@ -681,47 +836,37 @@ The agent executed {trajectory_count} separate trajectories (e.g., different que
 """
         else:
             # Single-trajectory format (backwards compatible)
+            MAX_EXECUTION_CHARS = 80_000
+            execution_json = json.dumps(AGENT_EXECUTION, indent=2)
+            if len(execution_json) > MAX_EXECUTION_CHARS:
+                execution_json = execution_json[:MAX_EXECUTION_CHARS] + "\n... (truncated — trajectory too large)"
             execution_section = f"""
 Here is the target agent execution trajectory:
 ```json
-{json.dumps(AGENT_EXECUTION, indent=2)}
+{execution_json}
 ```
 
 NOTE: If you see an "error" field in the above JSON, it means the execution log was malformed or missing. Focus on making the agent more robust.
 """
 
-        # Prepare execution status for feedback agent
-        if target_agent_success:
-            # Get last 10 lines of stdout for quick preview
-            stdout_lines = target_agent_stdout.split('\n')
-            last_10_lines = '\n'.join(stdout_lines[-10:]) if len(stdout_lines) > 10 else target_agent_stdout
-
-            execution_status = f"""SUCCESS: Target agent completed execution successfully.
-
-**Last 10 lines of output**:
-```
-{last_10_lines}
-```
-
-Full logs available at: {stdout_log_file}
-"""
+        # Load evaluation result (results.json produced by the target agent)
+        results_json_path = os.path.join(current_gen_directory, "results.json")
+        if os.path.exists(results_json_path):
+            with open(results_json_path) as f:
+                results_json_text = f.read()
         else:
-            # Get last 10 lines of stdout for quick preview
-            stdout_lines = target_agent_stdout.split('\n')
-            last_10_lines = '\n'.join(stdout_lines[-10:]) if len(stdout_lines) > 10 else target_agent_stdout
+            results_json_text = '{"error": "results.json not found — solution was not evaluated"}'
 
-            execution_status = f"""FAILED: {target_agent_error_msg}
-
-**Last 10 lines of output**:
-```
-{last_10_lines}
-```
-
-Full logs available at: {stdout_log_file}
-
-STDERR:
-{target_agent_stderr}
-"""
+        # Prepare execution status for feedback agent
+        last_lines = '\n'.join(target_agent_stdout.split('\n')[-10:])
+        if target_agent_success:
+            execution_status = f"SUCCESS\n\nLast output lines:\n```\n{last_lines}\n```"
+        else:
+            execution_status = (
+                f"{target_agent_error_msg}\n\n"
+                f"Last output lines:\n```\n{last_lines}\n```\n\n"
+                f"Full log: {stdout_log_file}"
+            )
 
         # Prepare next generation directory
         next_gen = current_gen + 1
@@ -732,16 +877,21 @@ STDERR:
         previous_gens_text = ", ".join(map(str, previous_gens_list)) if previous_gens_list else "None"
 
         # Call feedback agent with full context
+        guidelines_section = f"---\n{TASK_MODEL_GUIDELINES}\n---" if TASK_MODEL_GUIDELINES else ""
         feedback_agent_prompt_prepared = FEEDBACK_AGENT_PROMPT.format(
             CURRENT_GEN=current_gen,
             PREVIOUS_GENS=previous_gens_text,
             CONTEXT_MD_PATH=os.path.join(RUN_DIRECTORY, "context.md"),
+            CURRENT_GEN_DIR=current_gen_directory,
+            TARGET_AGENT_TIMEOUT=args.target_agent_timeout,
             SAMPLE_TASK_DESCRIPTIONS=SAMPLE_TASK_DESCRIPTIONS,
             AGENT_PY=AGENT_PY,
             TASK=TASK,
             EXECUTION_STATUS=execution_status,
+            RESULTS_JSON=results_json_text,
             EXECUTION_SECTION=execution_section,
             IMPROVEMENT_DIR=next_gen_directory,
+            TASK_MODEL_GUIDELINES_SECTION=guidelines_section,
         )
 
         os.makedirs(next_gen_directory, exist_ok=True)

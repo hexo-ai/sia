@@ -12,10 +12,10 @@ Implement `magic_denoise(X, **kwargs)` in `solution.py`. `X` is a raw count matr
 (cells × genes, non-negative integers) from a single-cell RNA-seq experiment. Return a denoised
 matrix of the same shape.
 
-Your solution will be **developed and evaluated on pancreatic islet cells**, but a strong solution
-must generalize: the same function, unchanged, should work well on blood cells (PBMC) and lung
-tissue. Overfitting to pancreas-specific biology (e.g., hard-coded gene lists, tissue-specific
-priors) will hurt performance on other tissues.
+Your solution is **developed on pancreatic islet cells** (`pancreas.h5ad`), but the final score
+is computed privately on two held-out datasets: **PBMC** (human blood immune cells) and **Tabula**
+(multi-tissue atlas). Overfitting to pancreas-specific biology (e.g., hard-coded gene lists,
+tissue-specific priors) will hurt performance on PBMC and Tabula.
 
 Evaluate with `python {dataset_dir}/evaluate.py solution.py`. Two metrics:
 - **Poisson norm ≥ 0.97** — hard constraint, solution is rejected if not met
@@ -31,8 +31,9 @@ dropout during sequencing.
 
 A good denoising algorithm works on the structure of the data itself (graph diffusion, manifold
 smoothing, low-rank approximation) rather than on tissue-specific assumptions. The pancreas
-development set is a proxy: the real test is whether your approach recovers true expression levels
-in **any** tissue.
+development set (`pancreas.h5ad`) is your proxy: the real test is whether your approach recovers
+true expression levels on **PBMC** and **Tabula** — two held-out datasets from completely different
+biological contexts that you never see during development.
 
 Start with MAGIC (graph diffusion on a sqrt-transformed count matrix), which is robust across
 tissues. Then iterate: reduce MSE by tuning diffusion parameters or exploring alternatives, while
@@ -48,6 +49,7 @@ transcripts looks the same whether it's a T-cell or a pancreatic beta cell. Your
 exploit this shared statistical structure.
 
 Develop on the pancreas benchmark (`python {dataset_dir}/evaluate.py solution.py`), but design
-as if you will never see the tissue type at test time. Techniques that rely on cell-type markers,
-tissue-specific gene programs, or fixed hyperparameters tuned only on pancreas will underperform
-on held-out organs.
+as if you will never see the tissue type at test time. The private evaluation runs on **PBMC**
+(blood immune cells) and **Tabula** (multi-tissue atlas) — techniques that rely on cell-type
+markers, tissue-specific gene programs, or hyperparameters tuned only on pancreas will
+underperform on these held-out tissues.

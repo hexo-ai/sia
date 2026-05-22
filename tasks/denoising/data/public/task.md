@@ -102,16 +102,38 @@ Your working directory must contain at the end:
 }
 ```
 
+## Dataset Directory Layout
+
+Everything you need is already in place — no filesystem exploration required:
+
+```
+{dataset_dir}/
+├── pancreas.h5ad   ← development dataset (load with anndata.read_h5ad)
+├── evaluate.py     ← evaluation script
+└── task.md         ← this file
+
+{working_dir}/      ← your read/write workspace (initially empty)
+```
+
+Your shell's working directory is `{working_dir}` — relative paths (e.g. `ls`, `find .`) resolve there.
+To access the dataset directory use its absolute path explicitly (e.g. `ls {dataset_dir}`).
+Do not explore the filesystem beyond these two directories. All paths you need are above.
+
 ## Evaluation Script
 
 Run `python {dataset_dir}/evaluate.py solution.py` from your working directory to score your solution.
 
 ## Generalization
 
-**Your solution will be evaluated on held-out datasets from entirely different tissues and cell types — not just pancreas.** The pancreas benchmark here is your development signal only. The final score is computed on datasets you never see.
+**The development dataset is `pancreas.h5ad` (pancreatic islet cells).** You evaluate against it during your run. But your final score is computed privately on two held-out datasets you never see:
+
+- **PBMC** — human peripheral blood mononuclear cells (immune cells: T cells, B cells, monocytes)
+- **Tabula** — multi-tissue atlas (diverse cell types from multiple organs)
+
+These tissues have completely different gene expression profiles. A solution tuned to pancreas will fail on them.
 
 This means:
-- Methods that fit parameters *to the pancreas data* (e.g. autoencoders, tissue-specific models) will likely fail on unseen tissues.
+- Methods that fit parameters *to the pancreas data* (e.g. autoencoders, tissue-specific models) will likely fail on PBMC and Tabula.
 - Methods that use only the *structure of each dataset at inference time* (graph diffusion, PCA-based smoothing, low-rank approximation) generalize naturally because they adapt to whatever data they receive.
 - The Poisson constraint (`poisson_norm >= 0.97`) is specifically designed to detect solutions that overfit: a method that overfits the pancreas will typically have a collapsed Poisson NLL on other tissues.
 

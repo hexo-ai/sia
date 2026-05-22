@@ -1,0 +1,25 @@
+# Base packages installed in every run's venv.
+# Single source of truth — do not hardcode package lists in orchestrator.py.
+
+# LLM providers & routing
+anthropic
+openai
+litellm
+google-genai
+
+# Harmony format (gpt-oss-120b encoding/decoding)
+openai_harmony
+
+# Tinker SDK (gpt-oss-120b sampling via internal vLLM endpoint)
+# Install separately if not on public PyPI: pip install tinker --extra-index-url <internal-registry>
+tinker
+
+# Utilities
+python-dotenv
+tqdm
+pydantic
+
+# Data / ML (commonly needed by target agents)
+scikit-learn
+pandas
+numpy

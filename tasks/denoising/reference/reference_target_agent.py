@@ -2,184 +2,261 @@
 """
 Reference target agent for the scRNA-seq denoising task.
 
-Plain chat loop — no tool calls (gpt-oss-120b via Tinker does not support them).
-Each turn: model emits a ```python``` block → saved as solution.py → evaluated
-in-process via evaluate.run_evaluation() → score fed back as a user message.
+Uses call_task_model() from shared_dir for all LLM calls.
+Supports gpt-oss-120b via Tinker SDK + openai_harmony and any model via litellm.
 
 Usage:
     python reference_target_agent.py \
         --dataset_dir /path/to/data/public \
         --working_dir  /path/to/working \
-        --model        openai/gpt-oss-120b \
-        --max_turns    10
+        --shared_dir   /path/to/tasks/_shared \
+        --model        openai/gpt-oss-120b
+
+    # To use a specific Tinker checkpoint, pass it directly as --model:
+    python reference_target_agent.py \
+        --dataset_dir /path/to/data/public \
+        --working_dir  /path/to/working \
+        --shared_dir   /path/to/tasks/_shared \
+        --model        tinker://feea41a7-...:train:0/sampler_weights/000008
 """
 
 import argparse
-import importlib.util
 import json
 import logging
 import os
-import re
-from datetime import datetime
+import sys
+import time
+from datetime import date
 from pathlib import Path
-
-from openai import OpenAI
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-TINKER_BASE_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
 
+TOOLS = [
+    {
+        "name": "bash",
+        "description": "Run a bash command and return stdout + stderr.",
+        "parameters": {
+            "type": "object",
+            "properties": {"command": {"type": "string", "description": "The shell command to run"}},
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "read_file",
+        "description": "Read a file and return its contents.",
+        "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string", "description": "Path to the file"}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "write_file",
+        "description": "Write content to a file (overwrites if it exists).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path":    {"type": "string", "description": "Path to the file"},
+                "content": {"type": "string", "description": "Content to write"},
+            },
+            "required": ["path", "content"],
+        },
+    },
+]
 
-def _make_client(model: str) -> OpenAI:
-    m = model.lower()
-    if "gpt-oss" in m or "tinker" in m:
-        return OpenAI(api_key=os.environ["TINKER_API_KEY"], base_url=TINKER_BASE_URL)
-    if any(m.startswith(p) for p in ("claude", "anthropic/")):
-        return OpenAI(api_key=os.environ["ANTHROPIC_API_KEY"],
-                      base_url="https://api.anthropic.com/v1")
-    if any(m.startswith(p) for p in ("gemini/", "google/")):
-        key = os.environ.get("GEMINI_API_KEY") or os.environ["GOOGLE_API_KEY"]
-        return OpenAI(api_key=key,
-                      base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
-    return OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+# TypeScript-syntax tool definitions for the Harmony developer message
+TOOLS_TS = """\
+namespace functions {
 
+// Run a bash command and return stdout + stderr.
+type bash = (_: {
+// The shell command to run
+command: string,
+}) => any;
 
-def _load_evaluate(dataset_dir: str):
-    """Import run_evaluation and load_solution directly from evaluate.py."""
-    path = os.path.join(dataset_dir, "evaluate.py")
-    spec = importlib.util.spec_from_file_location("_evaluate", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.run_evaluation, mod.load_solution
+// Read a file and return its contents.
+type read_file = (_: {
+// Path to the file
+path: string,
+}) => any;
 
+// Write content to a file (overwrites if it exists).
+type write_file = (_: {
+// Path to the file
+path: string,
+// Content to write
+content: string,
+}) => any;
 
-def _extract_code(text: str) -> str | None:
-    blocks = re.findall(r"```python\s*(.*?)```", text, re.DOTALL)
-    return blocks[-1].strip() if blocks else None
-
-
-# ── Agent loop ─────────────────────────────────────────────────────────────────
-
-def run_agent(task: str, working_dir: str, dataset_dir: str,
-              client: OpenAI, model: str, max_turns: int) -> list:
-    logger.info("=" * 70)
-    logger.info(f"Starting denoising agent  model={model}  max_turns={max_turns}")
-    logger.info("=" * 70)
-
-    run_evaluation, load_solution = _load_evaluate(dataset_dir)
-    solution_path = os.path.join(working_dir, "solution.py")
-
-    messages = [{"role": "user", "content": task}]
-    trajectory = [{"role": "user", "content": task}]
-    start_time = datetime.now()
-    best_score = 0.0
-
-    for turn in range(1, max_turns + 1):
-        logger.info(f"\n{'─' * 40}  Turn {turn}/{max_turns}  {'─' * 40}")
-
-        response = client.chat.completions.create(
-            model=model, messages=messages, max_tokens=8192,
-        )
-        text = response.choices[0].message.content or ""
-        logger.info(f"[Assistant] {text[:400]}{'...' if len(text) > 400 else ''}")
-
-        messages.append({"role": "assistant", "content": text})
-        trajectory.append({"role": "assistant", "content": text, "turn": turn})
-
-        code = _extract_code(text)
-        if code is None:
-            logger.info("[Agent] No code block - done.")
-            break
-
-        os.makedirs(working_dir, exist_ok=True)
-        Path(solution_path).write_text(code, encoding="utf-8")
-        logger.info(f"[Agent] solution.py saved ({len(code)} chars) → evaluating...")
-
-        try:
-            magic_fn = load_solution(solution_path)
-            result = run_evaluation(magic_fn)
-        except Exception as e:
-            result = {"error": str(e), "score": 0.0}
-
-        score = result.get("score", 0.0)
-        if score > best_score:
-            best_score = score
-        logger.info(f"[Eval]  score={score:.4f}  mse={result.get('mse')}  poisson={result.get('poisson')}")
-
-        eval_json = json.dumps(result, indent=2)
-        feedback = (
-            f"## Evaluation result (turn {turn})\n\n"
-            f"```json\n{eval_json}\n```\n\n"
-            "If the score can be improved, write an updated implementation as a "
-            "```python``` code block. If you are satisfied, reply without a code block."
-        )
-        messages.append({"role": "user", "content": feedback})
-        trajectory.append({"role": "user", "content": feedback, "turn": turn, "result": result})
-
-    duration = (datetime.now() - start_time).total_seconds()
-    logger.info(f"\nAgent finished  turns={turn}  best_score={best_score:.4f}  time={duration:.1f}s")
-    return trajectory
-
-
-# ── Entry point ────────────────────────────────────────────────────────────────
+} // namespace functions"""
 
 def main():
-    parser = argparse.ArgumentParser(description="Reference target agent — denoising task")
-    parser.add_argument("--dataset_dir", required=True,
-                        help="Path to data/public/ (contains task.md + evaluate.py)")
-    parser.add_argument("--working_dir", required=True,
-                        help="Working directory — agent writes solution.py here")
-    parser.add_argument("--model", default="openai/gpt-oss-120b")
-    parser.add_argument("--max_turns", type=int, default=10)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset_dir", required=True)
+    parser.add_argument("--working_dir", required=True)
+    parser.add_argument("--shared_dir",  required=True, help="Path to tasks/_shared/")
+    parser.add_argument("--model",       required=True,
+                        help="Model name or Tinker checkpoint path (e.g. openai/gpt-oss-120b or tinker://...)")
+    parser.add_argument("--max_turns",     type=int, default=30,
+                        help="Maximum number of LLM turns in the tool loop (default: 30)")
+    parser.add_argument("--target_agent_timeout", type=int, default=600,
+                        help="Wall-clock time limit in seconds (default: 600)")
+    parser.add_argument("--task_model_temperature", type=float, default=0.3,
+                        help="Sampling temperature for the task model (default: 0.3)")
     args = parser.parse_args()
 
     dataset_dir = os.path.abspath(args.dataset_dir)
     working_dir = os.path.abspath(args.working_dir)
     os.makedirs(working_dir, exist_ok=True)
 
-    client = _make_client(args.model)
-    logger.info(f"model={args.model}  dataset={dataset_dir}  working={working_dir}")
+    sys.path.insert(0, args.shared_dir)
+    from call_task_model import call_task_model
+    import tools as _tools
 
-    task_md = Path(dataset_dir, "task.md").read_text(encoding="utf-8")
+    MAX_OUTPUT_CHARS = 8_000
 
-    task_prompt = f"""{task_md}
+    def _bash(command: str) -> str:
+        out = _tools.bash(command, working_dir=working_dir, dataset_dir=dataset_dir)
+        if len(out) > MAX_OUTPUT_CHARS:
+            out = out[:MAX_OUTPUT_CHARS] + f"\n... [truncated — {len(out)} total chars]"
+        return out
 
----
+    def _read_file(path: str) -> str:
+        out = _tools.read_file(path, working_dir=working_dir, dataset_dir=dataset_dir)
+        if len(out) > MAX_OUTPUT_CHARS:
+            out = out[:MAX_OUTPUT_CHARS] + f"\n... [truncated — {len(out)} total chars]"
+        return out
 
-## Your task
+    def _write_file(path: str, content: str) -> str:
+        return _tools.write_file(path, content, working_dir=working_dir)
 
-Write a `magic_denoise` function that achieves the highest possible score.
+    def dispatch_tool(name: str, tool_args: dict) -> str:
+        if name == "bash":
+            return _bash(tool_args.get("command", ""))
+        if name == "read_file":
+            return _read_file(tool_args.get("path", ""))
+        if name == "write_file":
+            return _write_file(tool_args.get("path", ""), tool_args.get("content", ""))
+        return f"[ERROR] unknown tool: {name}"
 
-Each time you write code, wrap it in a ```python``` block. It will be saved as
-`solution.py` and evaluated automatically — you will receive the result as feedback.
-Iterate until you cannot improve further, then reply without a code block.
+    task_md       = Path(dataset_dir, "task.md").read_text(encoding="utf-8")
+    solution_path = os.path.join(working_dir, "solution.py")
+    evaluate_path = os.path.join(dataset_dir, "evaluate.py")
+    results_path  = os.path.join(working_dir, "results.json")
+    today         = date.today().isoformat()
 
-### Requirements
+    system_content = f"""\
+You are ChatGPT, a large language model trained by OpenAI.
+Knowledge cutoff: 2024-06
+Current date: {today}
 
-- Top-level `magic_denoise(X, **kwargs)` function
-- `X`: numpy array (cells × genes, raw integer counts); accepts optional `random_state` kwarg
-- Returns a numpy array of the same shape with non-negative values
-- All imports included in the file
+Reasoning: high
 
-### Available libraries
+# Valid channels: analysis, commentary, final. Channel must be included for every message.
+Calls to these tools must go to the commentary channel: 'functions'."""
 
-numpy, scipy, sklearn, graphtools, scprep, scanpy, anndata, molecular_cross_validation
+    developer_content = f"""\
+# Instructions
 
-### Scoring
+{task_md}
 
-- Hard constraint: `poisson_norm >= 0.97` (score = 0 if not met)
-- Score = `mse_norm` ∈ [0, 1] when constraint is satisfied (higher is better)
+Write a `magic_denoise(X, **kwargs)` function and save it to `{solution_path}`.
+Then evaluate it by running: python {evaluate_path} {solution_path}
 
-Start with a working baseline, then iterate.
-"""
+Write and evaluate a solution as early as possible, then iterate to improve the score.
+A per-turn status message will tell you how many turns and how much time remain — save your best solution after every improvement.
 
-    trajectory = run_agent(task_prompt, working_dir, dataset_dir,
-                           client, args.model, args.max_turns)
+Constraints:
+- bash: only operate on files/folders inside the working directory or the dataset directory.
+- read_file: only read files inside the working directory or the dataset directory.
+- write_file: only write files inside the working directory.
 
-    log_path = os.path.join(working_dir, "agent_execution.json")
-    Path(log_path).write_text(json.dumps(trajectory, indent=2, default=str), encoding="utf-8")
-    logger.info(f"Trajectory → {log_path}")
+Working directory (read/write): {working_dir}
+Dataset directory (read-only):  {dataset_dir}
+
+# Tools
+
+## functions
+
+{TOOLS_TS}"""
+
+    messages = [
+        {"role": "system",    "content": system_content},
+        {"role": "developer", "content": developer_content},
+    ]
+
+    trajectory = []
+    start_time = time.time()
+    log_dir = os.path.join(working_dir, "task_model_logs")
+
+    for turn in range(1, args.max_turns + 1):
+        elapsed = time.time() - start_time
+        remaining_turns = args.max_turns - turn + 1
+        remaining_time  = args.target_agent_timeout - elapsed
+        status = (
+            f"Please complete the task described above."
+            if turn == 1 else
+            f"[Turn {turn}/{args.max_turns} — {elapsed:.0f}s elapsed, "
+            f"~{remaining_turns} turns and ~{remaining_time:.0f}s remaining]"
+        )
+        messages.append({"role": "user", "content": status})
+        logger.info(f"Turn {turn}/{args.max_turns} — {elapsed:.0f}s elapsed")
+
+        response = call_task_model(
+            messages=messages,
+            model=args.model,
+            tools=TOOLS,
+            log_dir=log_dir,
+            temperature=args.task_model_temperature,
+        )
+
+        tool_calls = response["tool_calls"]
+        logger.info(f"  tool_calls: {[tc['name'] for tc in tool_calls]}")
+        if response["content"]:
+            logger.info(f"  content: {response['content'][:120]}")
+
+        # Per Harmony spec: keep CoT in history when tool calls follow;
+        # drop CoT after a final response; keep everything (including analysis)
+        # when the model generated analysis only (no tool call, no final) so the
+        # next turn has full context.
+        if tool_calls or not response["content"]:
+            messages.extend(response["raw_messages"])
+        else:
+            messages.extend(
+                m for m in response["raw_messages"] if m.get("channel") in ("final", None)
+            )
+
+        turn_record: dict = {"turn": turn, "tool_calls": [], "content": response["content"]}
+
+        for tc in tool_calls:
+            result = dispatch_tool(tc["name"], tc["args"])
+            logger.info(f"  {tc['name']} → {result[:120]}")
+            turn_record["tool_calls"].append({"name": tc["name"], "args": tc["args"], "result": result})
+            messages.append({
+                "role":    "tool_result",
+                "name":    tc["name"],
+                "content": result,
+                "call_id": tc.get("call_id"),
+            })
+
+        trajectory.append(turn_record)
+
+        # Write after every turn so the log survives a crash or timeout
+        Path(working_dir, "agent_execution.json").write_text(
+            json.dumps(trajectory, indent=2, default=str), encoding="utf-8"
+        )
+
+        if not tool_calls:
+            break
+
+        if os.path.exists(results_path):
+            break
+
+    if not os.path.exists(results_path):
+        logger.error(f"No results.json after {turn} turns.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

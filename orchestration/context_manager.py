@@ -257,43 +257,44 @@ class ContextManager:
         first_gen = self.generations[0]
         last_gen = self.generations[-1]
 
-        # Find best generation by primary metric (accuracy)
-        best_gen = None
-        best_metric = -float('inf')
-        for g in self.generations:
-            accuracy = g['metrics'].get('accuracy')
-            if accuracy is not None:
-                if isinstance(accuracy, str):
-                    # Handle percentage strings like "48.99%"
+        # Find primary metric key: prefer 'score', fall back to 'accuracy'
+        def _primary_metric(metrics):
+            for key in ('score', 'accuracy'):
+                val = metrics.get(key)
+                if val is not None:
                     try:
-                        accuracy = float(accuracy.rstrip('%'))
-                    except:
-                        continue
-                if accuracy > best_metric:
-                    best_metric = accuracy
-                    best_gen = g
+                        return key, float(str(val).rstrip('%'))
+                    except (ValueError, TypeError):
+                        pass
+            return None, None
 
-        # Calculate evolution
+        lower_is_better = any(g['metrics'].get('lower_is_better') for g in self.generations)
+
+        best_gen = None
+        best_metric = float('inf') if lower_is_better else -float('inf')
+        for g in self.generations:
+            _, val = _primary_metric(g['metrics'])
+            if val is None:
+                continue
+            if (lower_is_better and val < best_metric) or (not lower_is_better and val > best_metric):
+                best_metric = val
+                best_gen = g
+
+        # Calculate evolution using the same primary metric
         evolution_text = "N/A"
-        if first_gen['metrics'].get('accuracy') is not None and last_gen['metrics'].get('accuracy') is not None:
-            first_acc = first_gen['metrics']['accuracy']
-            last_acc = last_gen['metrics']['accuracy']
-
-            # Handle percentage strings
-            if isinstance(first_acc, str):
-                first_acc = float(first_acc.rstrip('%'))
-            if isinstance(last_acc, str):
-                last_acc = float(last_acc.rstrip('%'))
-
-            gain = last_acc - first_acc
-            evolution_text = f"{first_acc:.2f}% → {last_acc:.2f}% ({gain:+.2f}%)"
+        first_key, first_val = _primary_metric(first_gen['metrics'])
+        last_key,  last_val  = _primary_metric(last_gen['metrics'])
+        if first_val is not None and last_val is not None:
+            gain = last_val - first_val
+            direction = "lower" if lower_is_better else "higher"
+            evolution_text = f"{first_val:.4f} → {last_val:.4f} ({gain:+.4f}, {direction} is better)"
 
         # Build summary
         summary = f"""## Summary Statistics
 
 **Total Generations**: {len(self.generations)}
 **Successful Executions**: {sum(1 for g in self.generations if g.get('success', True))}
-**Best Performance**: Generation {best_gen['gen_num'] if best_gen else 'N/A'} ({best_metric:.2f}% accuracy)
+**Best Performance**: Generation {best_gen['gen_num'] if best_gen else 'N/A'} ({best_metric:.4f})
 
 **Evolution**:
 - {evolution_text}
@@ -330,14 +331,15 @@ class ContextManager:
             try:
                 with open(results_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    if 'accuracy' in data:
-                        metrics['accuracy'] = data['accuracy']
-                    if 'correct' in data:
-                        metrics['correct'] = data['correct']
-                    if 'total_questions' in data:
-                        metrics['total'] = data['total_questions']
-                    if 'total_tokens' in data:
-                        metrics['total_tokens'] = data['total_tokens']
+                for key in ('score', 'accuracy', 'correct', 'lower_is_better'):
+                    if key in data:
+                        metrics[key] = data[key]
+                if 'total_questions' in data:
+                    metrics['total'] = data['total_questions']
+                if 'total_tokens' in data:
+                    metrics['total_tokens'] = data['total_tokens']
+                if 'error' in data:
+                    metrics['eval_error'] = data['error']
             except Exception as e:
                 print(f"Warning: Could not parse results.json: {e}")
 
@@ -487,16 +489,24 @@ class ContextManager:
 
         entry += f"""
 ### Execution Summary
-- Execution status: {status}
+- Target agent: {status}
 - Output format: {gen_data.get('execution_type', 'Unknown')}
 
-### Performance Metrics
+### Evaluation Result
 """
+        eval_error = metrics.pop('eval_error', None)
+        if eval_error:
+            entry += f"- Status: FAILED\n- Error: {eval_error}\n"
+        elif metrics:
+            entry += "- Status: SUCCESS\n"
+        else:
+            entry += "- Status: UNKNOWN (no results.json)\n"
 
+        entry += "\n### Performance Metrics\n"
         if metrics:
             for key, value in metrics.items():
                 if isinstance(value, float):
-                    entry += f"- {key}: {value:.2f}\n"
+                    entry += f"- {key}: {value:.4f}\n"
                 else:
                     entry += f"- {key}: {value}\n"
         else:

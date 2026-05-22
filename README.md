@@ -69,12 +69,17 @@ sia/
         ├── venv/                 # Isolated Python environment (auto-created per run)
         ├── context.md            # Score history and evolution summary across generations
         ├── private_scores.png    # (end of run) private score curve + public as reference
+        ├── private_scores/       # Private eval results — kept separate so the feedback agent
+        │   └── gen_{n}/          #   cannot read them (never fed back as a training signal)
+        │       └── {model_slug}/
+        │           ├── solution.py          # Solution evaluated on the private test set
+        │           ├── private_result.json  # Private score for this model/generation
+        │           └── ...                  # Full agent working dir (for non-task models)
         └── gen_{n}/
             ├── target_agent.py            # Agent code for this generation
             ├── agent_execution.json       # Full execution trajectory (target agent)
             ├── target_agent_stdout.log    # Combined stdout+stderr of the target agent process
             ├── results.json               # Public eval score (written by evaluate.py)
-            ├── private_result.json        # Private eval score (written by orchestrator, display only)
             ├── improvement.md             # (gen 2+) feedback agent's analysis and plan
             ├── meta_agent_prompt.txt      # (gen 1) full prompt sent to meta-agent
             ├── feedback_agent_prompt.txt  # (gen 2+) full prompt sent to feedback agent
@@ -248,6 +253,21 @@ tasks/{task-id}/
 
 **`data/public/task.md`** — read by the meta-agent and injected verbatim into the target agent's prompt. Describe the task, data format, scoring, and any constraints.
 
+> **Tip:** Include an explicit layout of `dataset_dir/` so the agent knows exactly what files exist and where, without needing to explore. Also tell it: (1) its shell CWD is `working_dir` so relative paths resolve there, (2) to access `dataset_dir` it must use absolute paths, (3) it should not explore the filesystem beyond these two directories. This prevents the agent from wasting turns on `ls`/`find` calls. Example:
+> ```
+> ## Dataset Directory Layout
+> {dataset_dir}/
+> ├── data.csv      ← input data
+> ├── evaluate.py   ← run with: python {dataset_dir}/evaluate.py solution.py
+> └── task.md       ← this file
+>
+> {working_dir}/    ← your read/write workspace and shell CWD (initially empty)
+>
+> Relative paths (ls, find .) resolve to {working_dir}.
+> Use absolute paths to access {dataset_dir} (e.g. ls {dataset_dir}).
+> Do not explore the filesystem beyond these two directories.
+> ```
+
 **`data/public/evaluate.py`** — called by the target agent during its improvement loop to score its solution.
 - Must write `results.json` next to the solution file. Required keys:
   ```jsonc
@@ -269,7 +289,7 @@ tasks/{task-id}/
     "error": null            // null on success, error string on failure
   }
   ```
-  The orchestrator reads both `results.json` and `private_result.json` to produce `scores.png`, which overlays the public and private score curves across generations — making it easy to spot overfitting (public improves while private does not).
+  The orchestrator runs private eval in `runs/run_{id}/private_scores/gen_{n}/{model_slug}/` — outside the generation directory — so the feedback agent cannot read the private score. Results are aggregated into `private_scores.png` at the end of the run, overlaying public and private score curves to make overfitting visible.
 
 **`reference/reference_target_agent.py`** — shown verbatim to the meta-agent as a concrete implementation pattern. Use the task-specific version for tasks with unusual scaffolding requirements (e.g. no tool calls, custom eval loop).
 

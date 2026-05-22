@@ -158,8 +158,7 @@ async def run_agent_openhands(model_name, max_turns, prompt, agent_working_direc
     else:
         api_key = os.getenv("LLM_API_KEY")
 
-    try:
-        # Silence all SDK output (loggers + OS-level fds) for the entire block
+    def _run_once(p: str) -> None:
         with _silence_openhands():
             llm = LLM(model=model_name, api_key=api_key)
             agent = Agent(
@@ -171,15 +170,31 @@ async def run_agent_openhands(model_name, max_turns, prompt, agent_working_direc
                 workspace=agent_working_directory,
                 persistence_dir=trajectory_dir,
             )
-            conversation.send_message(prompt)
-            result = conversation.run()
+            conversation.send_message(p)
+            conversation.run()
 
+    MAX_PROMPT_CHARS = 300_000
+
+    try:
+        _run_once(prompt)
         elapsed = (datetime.now() - start_time).total_seconds()
         logger.info(f"OpenHands agent done in {elapsed:.1f}s  trajectory → {trajectory_dir}")
 
     except Exception as e:
-        logger.error(f"OpenHands ERROR: {e}", exc_info=True)
-        raise
+        if "ContextWindowExceeded" in str(type(e).__mro__[1].__name__ if len(type(e).__mro__) > 1 else "") or \
+           any(kw in str(e) for kw in ("ContextWindowExceeded", "token count exceeds", "context_length_exceeded")):
+            logger.warning(f"OpenHands context window exceeded — retrying with truncated prompt ({MAX_PROMPT_CHARS} chars)")
+            truncated = prompt[:MAX_PROMPT_CHARS] + "\n\n... (prompt truncated due to context window limit)"
+            try:
+                _run_once(truncated)
+                elapsed = (datetime.now() - start_time).total_seconds()
+                logger.info(f"OpenHands agent done (truncated retry) in {elapsed:.1f}s  trajectory → {trajectory_dir}")
+            except Exception as e2:
+                logger.error(f"OpenHands ERROR after retry: {e2}", exc_info=True)
+                raise
+        else:
+            logger.error(f"OpenHands ERROR: {e}", exc_info=True)
+            raise
 
 
 async def run_agent(
