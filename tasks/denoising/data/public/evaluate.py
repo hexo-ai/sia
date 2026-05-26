@@ -60,11 +60,9 @@ def evaluate_poisson(train_data, test_data, denoised):
     from molecular_cross_validation.mcv_sweep import poisson_nll_loss
     import scprep
     test_X = scprep.utils.toarray(test_data)
-    train_X = scprep.utils.toarray(train_data)
-    denoised_X = np.asarray(denoised)
-    denoised_X = denoised_X / np.maximum(denoised_X.sum(axis=1, keepdims=True), 1e-12)
-    denoised_X *= train_X.sum(axis=1, keepdims=True)
-    return float(poisson_nll_loss(test_X, denoised_X).mean())
+    denoised_X = np.asarray(denoised).copy()
+    denoised_scaled = denoised_X * test_X.sum() / max(train_data.sum(), 1e-12)
+    return float(poisson_nll_loss(test_X, denoised_scaled).mean())
 
 
 V_BASELINES = BASELINES
@@ -133,8 +131,7 @@ def run_evaluation(magic_denoise_fn, seed=42):
     poisson_norm = (baseline["baseline_poisson"] - poisson) / poisson_range if poisson_range > 0 else 0
     poisson_norm = max(0.0, min(1.0, poisson_norm))
 
-    passed_constraint = poisson_norm >= 0.97
-    score = mse_norm if passed_constraint else 0.0
+    score = (mse_norm + poisson_norm) / 2
 
     return {
         "mse": mse,
@@ -142,7 +139,6 @@ def run_evaluation(magic_denoise_fn, seed=42):
         "mse_norm": mse_norm,
         "poisson_norm": poisson_norm,
         "score": score,
-        "passed_poisson_constraint": bool(passed_constraint),
         "elapsed_seconds": elapsed,
         "error": None,
     }
@@ -179,20 +175,27 @@ def main():
 
     # Write results.json next to solution.py so the orchestrator can track scores
     result["accuracy"] = result.get("score", 0.0)
+    try:
+        with open(solution_path) as _sf:
+            result["solution_code"] = _sf.read()
+    except Exception:
+        result["solution_code"] = None
     results_path = os.path.join(os.path.dirname(solution_path), "results.json")
     with open(results_path, "w") as f:
         json.dump(result, f, indent=2)
     print(f"Results written to: {results_path}", flush=True)
 
+    # Print metrics to stdout (exclude solution_code — it's large and already saved to disk)
+    result_for_stdout = {k: v for k, v in result.items() if k != "solution_code"}
     print("\n=== EVALUATION RESULT ===")
-    print(json.dumps(result, indent=2))
+    print(json.dumps(result_for_stdout, indent=2))
     print("=========================")
 
     if result.get("score", 0) > 0:
         print(f"\nSCORE: {result['score']:.4f}")
         print(f"MSE: {result['mse']:.6f} (norm: {result.get('mse_norm', 0):.4f})")
         print(f"Poisson: {result['poisson']:.6f} (norm: {result.get('poisson_norm', 0):.4f})")
-        print(f"Poisson constraint passed: {result.get('passed_poisson_constraint', False)}")
+        print(f"Poisson norm: {result.get('poisson_norm', 0):.4f}")
     else:
         print(f"\nFAILED: {result.get('error', 'Unknown error')}")
 

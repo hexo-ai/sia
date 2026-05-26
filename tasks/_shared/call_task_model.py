@@ -55,9 +55,6 @@ import os
 import time
 from typing import Any
 
-TINKER_DEFAULT_BASE_URL = (
-    "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1"
-)
 
 # Transient network error class names worth retrying (covers httpx, openai, tinker, stdlib)
 _RETRYABLE = frozenset({
@@ -82,8 +79,9 @@ def _with_retry(fn, max_attempts: int = 4, base_delay: float = 4.0):
 
 
 def is_tinker(model: str) -> bool:
-    """True only for tinker:// SDK paths (raw token sampling)."""
-    return model.lower().startswith("tinker://")
+    """True for tinker:// checkpoint paths and openai/gpt-oss-* base models (both use Tinker SDK)."""
+    m = model.lower()
+    return m.startswith("tinker://") or m.startswith("openai/gpt-oss")
 
 
 
@@ -99,8 +97,9 @@ def call_task_model(
     """Call the model and return a structured response dict.
 
     Routing:
-      tinker://...  → Tinker SDK + openai_harmony token-level decode
-      anything else → litellm
+      tinker://...        → Tinker SDK + openai_harmony, model_path= (fine-tuned checkpoint)
+      openai/gpt-oss-*    → Tinker SDK + openai_harmony, base_model= (base model)
+      anything else       → litellm
     """
     if is_tinker(model):
         return _call_tinker_harmony(messages, model, tools, log_dir, temperature)
@@ -228,7 +227,7 @@ def _parse_harmony_text(text: str) -> dict[str, Any]:
 
 def _call_tinker_harmony(
     messages: list[dict],
-    model_path: str,
+    model: str,
     tools: list[dict] | None,
     log_dir: str | None,
     temperature: float = 0.7,
@@ -245,7 +244,11 @@ def _call_tinker_harmony(
     convo        = Conversation.from_messages(harmony_msgs)
     input_tokens = list(encoding.render_conversation_for_completion(convo, Role.ASSISTANT))
 
-    sampler     = tinker.ServiceClient().create_sampling_client(model_path=model_path)
+    if model.lower().startswith("tinker://"):
+        sampler = tinker.ServiceClient().create_sampling_client(model_path=model)
+    else:
+        # openai/gpt-oss-* base model
+        sampler = tinker.ServiceClient().create_sampling_client(base_model=model)
     model_input = types.ModelInput.from_ints(input_tokens)
     out         = _with_retry(lambda: sampler.sample(
         prompt=model_input,

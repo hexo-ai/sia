@@ -278,6 +278,7 @@ tasks/{task-id}/
     "error": null            // null on success, error string on failure
   }
   ```
+- **Optional `solution_code` field**: if the evaluator also writes `"solution_code": "<content>"` (the text of the solution file it scored), the feedback agent will receive this alongside the score. It uses `solution_code` as **scaffold behavior evidence** — to verify whether the scaffold produced the expected output structure, how many iterations it ran, etc. — not as a template to optimise directly. This field is included automatically when using the denoising evaluator.
 
 **`data/private/evaluate.py`** — called by the orchestrator after each generation, never exposed to the target agent.
 - Must accept `--gen-dir <path>`. The evaluator finds task artifacts (e.g. `solution.py`) inside that directory.

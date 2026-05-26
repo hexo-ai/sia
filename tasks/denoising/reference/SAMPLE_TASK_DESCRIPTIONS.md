@@ -17,9 +17,7 @@ is computed privately on two held-out datasets: **PBMC** (human blood immune cel
 (multi-tissue atlas). Overfitting to pancreas-specific biology (e.g., hard-coded gene lists,
 tissue-specific priors) will hurt performance on PBMC and Tabula.
 
-Evaluate with `python {dataset_dir}/evaluate.py solution.py`. Two metrics:
-- **Poisson norm ≥ 0.97** — hard constraint, solution is rejected if not met
-- **MSE norm** — your score (higher is better, range 0–1)
+Evaluate with `python {dataset_dir}/evaluate.py solution.py`. Score = mean(mse_norm, poisson_norm), range 0–1, higher is better. The `magic-impute` library is available — `magic.MAGIC().fit_transform(X)` scores ~0.61 and is the recommended starting point.
 
 ---
 
@@ -35,9 +33,7 @@ development set (`pancreas.h5ad`) is your proxy: the real test is whether your a
 true expression levels on **PBMC** and **Tabula** — two held-out datasets from completely different
 biological contexts that you never see during development.
 
-Start with MAGIC (graph diffusion on a sqrt-transformed count matrix), which is robust across
-tissues. Then iterate: reduce MSE by tuning diffusion parameters or exploring alternatives, while
-keeping Poisson norm ≥ 0.97.
+Start with `magic.MAGIC().fit_transform(X)` from the `magic-impute` library (available, scores ~0.61), which is robust across tissues. Then iterate: tune diffusion parameters (knn, t, decay), try different normalization orders, or explore complementary approaches to improve the mean(mse_norm, poisson_norm) score.
 
 ---
 
@@ -52,4 +48,4 @@ Develop on the pancreas benchmark (`python {dataset_dir}/evaluate.py solution.py
 as if you will never see the tissue type at test time. The private evaluation runs on **PBMC**
 (blood immune cells) and **Tabula** (multi-tissue atlas) — techniques that rely on cell-type
 markers, tissue-specific gene programs, or hyperparameters tuned only on pancreas will
-underperform on these held-out tissues.
+underperform on these held-out tissues. The `magic-impute` library is available: start from `magic.MAGIC().fit_transform(X)` (~0.61) and improve. Score = mean(mse_norm, poisson_norm).

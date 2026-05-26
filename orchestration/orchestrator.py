@@ -60,6 +60,20 @@ from util import run_agent
 from context_manager import ContextManager
 from model_guidelines import get_guidelines
 
+_PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+
+
+def _load_prompt(filename: str) -> str:
+    return open(os.path.join(_PROMPTS_DIR, filename), encoding="utf-8").read()
+
+
+def _fill_template(template: str, **kwargs) -> str:
+    """Replace {UPPER_CASE_KEY} placeholders in template. Single-pass via re.sub — safe against cascading."""
+    import re
+    def _replace(m):
+        return str(kwargs.get(m.group(1), m.group(0)))
+    return re.sub(r"\{([A-Z_][A-Z0-9_]*)\}", _replace, template)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -320,6 +334,14 @@ logger.info("  ✓ Sample agent execution loaded")
 TASK_MD = open(os.path.join(task_dir, "data/public/task.md")).read()
 logger.info("  ✓ Task specification loaded")
 
+SCAFFOLD_DESIGN_GUIDELINES = _load_prompt("scaffold_design_guidelines.md")
+TARGET_AGENT_SPEC         = _load_prompt("target_agent_spec.md")
+logger.info("  ✓ Shared prompt guidelines loaded")
+
+_META_AGENT_TEMPLATE     = _load_prompt("meta_agent_prompt.md")
+_FEEDBACK_AGENT_TEMPLATE = _load_prompt("feedback_agent_prompt.md")
+logger.info("  ✓ Prompt templates loaded")
+
 
 # ========================
 # SECTION 2: Setup Run Directories
@@ -392,191 +414,22 @@ logger.info("  ✓ Context manager initialized")
 # ========================
 
 TASK_MODEL_GUIDELINES = get_guidelines(task_model)
+_guidelines_section = f"\n---\n{TASK_MODEL_GUIDELINES}\n---\n" if TASK_MODEL_GUIDELINES else ""
 
-META_AGENT_PROMPT = f"""You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
-
-Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve:
-{TASK_MD}
-
-Here are a couple of sample task descriptions which the target agent has to solve:
-{SAMPLE_TASK_DESCRIPTIONS}
-
-Here is a sample target_agent.py showing the complete implementation pattern (READ THE ENTIRE FILE):
-{REFERENCE_TARGET_AGENT_PY}
-
-Here is a sample agent execution trajectory:
-{json.dumps(SAMPLE_AGENT_EXECUTION, indent=2)}
-
-CRITICAL RULES - FOLLOW EXACTLY:
-
-1. The current working directory is {META_AGENT_WORKING_DIRECTORY}. Create the target_agent.py in the current working directory itself.
-
-2. The target_agent.py MUST accept these command-line arguments:
-   - --dataset_dir: Absolute path to the dataset directory (READ-ONLY, provided at runtime)
-   - --working_dir: Absolute path to the working directory (READ-WRITE, provided at runtime)
-   - --shared_dir: Absolute path to tasks/_shared/ — add to sys.path to import call_task_model
-   - --model: The model name to use for all LLM calls (e.g. "openai/gpt-oss-120b", "tinker://...", "claude/claude-opus-4-7")
-   - --max_turns: Maximum number of LLM turns in the tool loop (int, provided at runtime)
-   - --task_model_temperature: Sampling temperature for all call_task_model() calls (float, provided at runtime)
-
-3. CRITICAL: The target_agent.py must INCLUDE these paths in the prompt it sends to {task_model}. {task_model} MUST be explicitly told:
-   - Where the dataset directory is located (the exact path from --dataset_dir)
-   - Where the working directory is located (the exact path from --working_dir)
-   - That it can ONLY READ from the dataset directory
-   - That it can READ from and WRITE to the working directory
-
-   DO NOT let {task_model} search for data in random locations. The prompt must say: "The dataset is at: <actual_dataset_dir_path>"
-
-4. The target agent can ONLY read from the dataset directory provided via --dataset_dir, and can ONLY write to the working directory specified by --working_dir. It must NOT access any other directories on the filesystem.
-
-5. EXECUTION LOGGING - CRITICAL:
-
-   The target_agent.py must log its execution trajectory properly. The format depends on the task type:
-
-   **FOR TASKS WITH MULTIPLE INDEPENDENT SAMPLES** (e.g., GPQA with 198 questions, multiple test cases):
-   - Create a folder: agent_execution/ in the working directory
-   - Save each sample separately: execution_q0.json, execution_q1.json, execution_q2.json, etc.
-   - Each file contains the complete trajectory for that ONE sample only
-   - Files must be named sequentially: execution_q0.json, execution_q1.json, ...
-
-   **FOR TASKS WITH SINGLE EXECUTION** (e.g., building one ML model, analyzing one dataset):
-   - Save to a single file: agent_execution.json in the working directory
-   - File contains the complete execution trajectory
-
-   **HOW TO DETERMINE WHICH FORMAT**:
-   - Read the task description carefully
-   - If it mentions "independent items", "dataset with multiple records to process separately"
-     → Use multi-trajectory (folder with multiple files)
-   - If it's about "build a model", "analyze the dataset", "create one solution", "optimize one system"
-     → Use single-trajectory (one JSON file)
-
-   **FORMAT REQUIREMENTS** (both formats):
-   - Use the same format as the sample agent execution trajectory provided above
-   - Include all messages, tool calls, and their results
-   - Ensure valid JSON (properly close all arrays/objects)
-   - **Write after every turn** (overwrite the file each time) so the log survives a crash or timeout — do NOT write only at the end of the loop
-
-6. Do NOT attempt to write to or modify files inside the dataset directory. It is READ-ONLY.
-7. The model name is passed at runtime via --model. Read it with argparse (args.model) and pass it to call_task_model().
-   Do NOT hardcode any model name. The model "{task_model}" requires the following environment variable(s) for authentication: {_required_api_key(task_model)[1]}.
-   Read that variable from os.environ — do not hardcode any API key.
-8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to {task_model} in the prompt.
-9. The target agent runs under two budget constraints:
-   - Hard time limit: passed via --target_agent_timeout — the process is killed when exceeded. Save solution.py (or equivalent output) after every improvement, not only at the end.
-   - Turn limit: --max_turns (args.max_turns) — the total number of LLM calls across ALL loops must not exceed this value. If your agent has nested loops (e.g. outer retry loop + inner tool loop), track a single shared counter and stop when it reaches args.max_turns. Do NOT hardcode a turn count.
-   - Inject a per-turn status message (user role) at each turn telling the model how many turns and seconds remain. Do NOT put static budget numbers in the developer/system message — they become stale immediately.
-   - When the budget is exhausted, exit cleanly (exit code 0) with a warning log. Do NOT call sys.exit(1) — the orchestrator interprets that as a crash, not a normal completion.
-
-Example invocation (paths will vary at runtime):
-    python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working --shared_dir /path/to/_shared --model {task_model} --max_turns {args.max_turns}
-{"" if not TASK_MODEL_GUIDELINES else f"""
----
-{TASK_MODEL_GUIDELINES}
----
-"""}"""
-
-FEEDBACK_AGENT_PROMPT = """You are an expert AI Engineer analyzing agent scaffolds for iterative improvement.
-
-**GENERATION CONTEXT**:
-- Current generation: {CURRENT_GEN}
-- Previous generations: {PREVIOUS_GENS}
-- Evolution history: {CONTEXT_MD_PATH}
-- Current generation directory (read-only): {CURRENT_GEN_DIR}
-- Hard time limit per run: **{TARGET_AGENT_TIMEOUT}s** — the process is killed when exceeded
-
-**BEFORE ANALYZING - READ THE FULL HISTORY**:
-1. Read {CONTEXT_MD_PATH} to understand:
-   - What improvements were tried in each previous generation
-   - Performance trends across generations
-   - What worked and what didn't work
-2. If you need more context beyond what is provided below, browse {CURRENT_GEN_DIR}/ freely:
-   - Any output files produced by the agent (e.g. solution.py, predictions, models)
-   - target_agent_stdout.log for the full execution output
-   - Earlier generation directories are also accessible (gen_0/, gen_1/, ...)
-3. Review previous improvement.md files from earlier generations if helpful
-4. Don't repeat failed approaches from earlier generations
-5. Build upon successful patterns that improved performance
-
----
-
-**SAMPLE TASK DESCRIPTIONS**:
-```
-{SAMPLE_TASK_DESCRIPTIONS}
-```
-
-**CURRENT TARGET AGENT** (Generation {CURRENT_GEN}):
-```python
-{AGENT_PY}
-```
-
-**TASK WORKED ON**:
-```
-{TASK}
-```
-
-**EXECUTION STATUS**:
-```
-{EXECUTION_STATUS}
-```
-
-**EVALUATION RESULT** (score achieved by the solution):
-```json
-{RESULTS_JSON}
-```
-
-**EXECUTION LOGS**:
-{EXECUTION_SECTION}
-
----
-
-**YOUR TASK**:
-
-You must create exactly TWO files in {IMPROVEMENT_DIR}/:
-1. improvement.md - Analysis and improvement plan
-2. target_agent.py - The improved agent implementation
-
-Follow these steps:
-
-**STEP 1: Analyze the execution**:
-   - For multi-trajectory: Look for patterns across all trajectories
-   - For single-trajectory: Analyze the full execution flow
-   - Identify what worked well and what failed
-   - Check for consistency and robustness
-
-**STEP 2: Review evolution history**:
-   - Read context.md to see the full evolution
-   - Understand what was tried in previous generations
-   - Build upon successful patterns
-   - Avoid repeating failed approaches
-
-**STEP 3: Write improvement.md**:
-   - MUST save to: {IMPROVEMENT_DIR}/improvement.md
-   - Document your analysis and planned improvements
-   - Focus on structural improvements to the agent scaffold
-   - Make the agent more robust and generalizable
-   - Don't optimize for this specific task
-   - Reference insights from previous generations if applicable
-
-**STEP 4: Create improved target_agent.py**:
-   - MUST save to: {IMPROVEMENT_DIR}/target_agent.py
-   - Implement the improvements documented in improvement.md
-   - Apply all the planned improvements from step 3
-   - Do not create or modify any other files besides these two
-
-**RULES**:
-- Focus on agent structure, not task-specific optimizations
-- Make the agent work well across diverse task types (see sample task descriptions)
-- If execution failed, fix the root cause
-- If multi-trajectory: ensure each trajectory is properly isolated and logged
-- Consider error handling, logging mechanisms, and robustness
-- Build upon successful patterns from previous generations (check context.md)
-- If execution log shows errors or is incomplete, suggest improvements to ensure proper logging
-- **Write agent_execution.json after every turn** (overwrite each time), not only at the end — so the log survives a crash or timeout
-- **Hard time limit is {TARGET_AGENT_TIMEOUT}s**: the agent process is killed when exceeded. The agent must save its best solution to disk after every improvement, not only at the end. It must also budget its turns so it doesn't run indefinitely — stop iterating and write the final solution before the timeout hits.
-
-NOTE: The agent execution log may be incomplete or contain errors if the target agent crashed. If you see an "error" field, focus on making the agent more robust to prevent such failures.
-{TASK_MODEL_GUIDELINES_SECTION}
-"""
+META_AGENT_PROMPT = _fill_template(
+    _META_AGENT_TEMPLATE,
+    TASK_MD=TASK_MD,
+    SAMPLE_TASK_DESCRIPTIONS=SAMPLE_TASK_DESCRIPTIONS,
+    REFERENCE_TARGET_AGENT_PY=REFERENCE_TARGET_AGENT_PY,
+    SAMPLE_AGENT_EXECUTION_JSON=json.dumps(SAMPLE_AGENT_EXECUTION, indent=2),
+    META_AGENT_WORKING_DIRECTORY=META_AGENT_WORKING_DIRECTORY,
+    TASK_MODEL=task_model,
+    REQUIRED_API_KEYS=str(_required_api_key(task_model)[1]),
+    MAX_TURNS=str(args.max_turns),
+    TASK_MODEL_GUIDELINES_SECTION=_guidelines_section,
+    SCAFFOLD_DESIGN_GUIDELINES=SCAFFOLD_DESIGN_GUIDELINES,
+    TARGET_AGENT_SPEC=TARGET_AGENT_SPEC,
+)
 
 
 # ========================
@@ -596,13 +449,24 @@ else:
         f.write(META_AGENT_PROMPT)
     logger.info(f"  ✓ Saved meta-agent prompt to: {meta_agent_prompt_path}")
 
-    asyncio.run(run_agent(
-        model_name=meta_model,
-        max_turns="20",
-        prompt=META_AGENT_PROMPT,
-        agent_working_directory=META_AGENT_WORKING_DIRECTORY,
-        backend=backend
-    ))
+    MAX_META_RETRIES = 3
+    for _meta_attempt in range(1, MAX_META_RETRIES + 1):
+        if _meta_attempt > 1:
+            logger.warning(f"  ↻ Meta-agent retry {_meta_attempt}/{MAX_META_RETRIES} — target_agent.py was not created")
+        asyncio.run(run_agent(
+            model_name=meta_model,
+            max_turns="20",
+            prompt=META_AGENT_PROMPT,
+            agent_working_directory=META_AGENT_WORKING_DIRECTORY,
+            backend=backend
+        ))
+        if Path(META_AGENT_WORKING_DIRECTORY, "target_agent.py").exists():
+            logger.info(f"  ✓ target_agent.py created by meta-agent (attempt {_meta_attempt})")
+            break
+        logger.warning(f"  ✗ target_agent.py not found after meta-agent run (attempt {_meta_attempt}/{MAX_META_RETRIES})")
+    else:
+        logger.error(f"  ✗ Meta-agent failed to create target_agent.py after {MAX_META_RETRIES} attempts — aborting")
+        sys.exit(1)
 
 
 # ========================
@@ -876,14 +740,82 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
         previous_gens_list = list(range(1, current_gen)) if current_gen > 1 else []
         previous_gens_text = ", ".join(map(str, previous_gens_list)) if previous_gens_list else "None"
 
+        # Find the best-scoring generation so far (including current)
+        best_score_so_far = -1.0
+        best_gen_so_far = current_gen
+        for g in range(0, current_gen + 1):
+            r_path = os.path.join(RUN_DIRECTORY, f"gen_{g}", "results.json")
+            if os.path.exists(r_path):
+                try:
+                    with open(r_path) as f:
+                        r = json.load(f)
+                    s = float(r.get("score", -1))
+                    if s > best_score_so_far:
+                        best_score_so_far = s
+                        best_gen_so_far = g
+                except Exception:
+                    pass
+
+        best_agent_py_path = os.path.join(RUN_DIRECTORY, f"gen_{best_gen_so_far}", "target_agent.py")
+        if os.path.exists(best_agent_py_path) and best_gen_so_far != current_gen:
+            best_agent_py = Path(best_agent_py_path).read_text(encoding="utf-8")
+            best_agent_section = (
+                f"**BEST TARGET AGENT SO FAR** (Generation {best_gen_so_far}, Score: {best_score_so_far:.4f}):\n"
+                f"```python\n{best_agent_py}\n```"
+            )
+        else:
+            best_agent_section = (
+                f"**BEST TARGET AGENT SO FAR**: Generation {best_gen_so_far} "
+                f"(Score: {best_score_so_far:.4f}) — same as current agent above."
+            )
+
+        # Build best-gen execution section (for prompt context)
+        if best_gen_so_far != current_gen:
+            best_exec_path = os.path.join(RUN_DIRECTORY, f"gen_{best_gen_so_far}", "agent_execution.json")
+            if os.path.exists(best_exec_path):
+                MAX_BEST_EXEC_CHARS = 80_000
+                best_exec_text = Path(best_exec_path).read_text(encoding="utf-8")
+                if len(best_exec_text) > MAX_BEST_EXEC_CHARS:
+                    best_exec_text = best_exec_text[:MAX_BEST_EXEC_CHARS] + "\n... (truncated)"
+                best_execution_section = (
+                    f"**Best generation (Gen {best_gen_so_far}, Score: {best_score_so_far:.4f}) execution trajectory:**\n"
+                    f"```json\n{best_exec_text}\n```"
+                )
+            else:
+                best_execution_section = (
+                    f"**Best generation (Gen {best_gen_so_far}):** agent_execution.json not found."
+                )
+        else:
+            best_execution_section = (
+                f"**Best generation (Gen {best_gen_so_far}):** same as current generation execution above."
+            )
+
+        # Build best-gen results section (for prompt context)
+        if best_gen_so_far != current_gen:
+            best_results_path = os.path.join(RUN_DIRECTORY, f"gen_{best_gen_so_far}", "results.json")
+            if os.path.exists(best_results_path):
+                best_results_text = Path(best_results_path).read_text(encoding="utf-8")
+                best_results_section = (
+                    f"**Best generation (Gen {best_gen_so_far}, Score: {best_score_so_far:.4f}) result:**\n"
+                    f"```json\n{best_results_text}\n```"
+                )
+            else:
+                best_results_section = (
+                    f"**Best generation (Gen {best_gen_so_far}):** results.json not found."
+                )
+        else:
+            best_results_section = (
+                f"**Best generation (Gen {best_gen_so_far}):** same as current generation result above."
+            )
+
         # Call feedback agent with full context
-        guidelines_section = f"---\n{TASK_MODEL_GUIDELINES}\n---" if TASK_MODEL_GUIDELINES else ""
-        feedback_agent_prompt_prepared = FEEDBACK_AGENT_PROMPT.format(
-            CURRENT_GEN=current_gen,
+        feedback_agent_prompt_prepared = _fill_template(
+            _FEEDBACK_AGENT_TEMPLATE,
+            CURRENT_GEN=str(current_gen),
             PREVIOUS_GENS=previous_gens_text,
             CONTEXT_MD_PATH=os.path.join(RUN_DIRECTORY, "context.md"),
             CURRENT_GEN_DIR=current_gen_directory,
-            TARGET_AGENT_TIMEOUT=args.target_agent_timeout,
+            TARGET_AGENT_TIMEOUT=str(args.target_agent_timeout),
             SAMPLE_TASK_DESCRIPTIONS=SAMPLE_TASK_DESCRIPTIONS,
             AGENT_PY=AGENT_PY,
             TASK=TASK,
@@ -891,7 +823,14 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
             RESULTS_JSON=results_json_text,
             EXECUTION_SECTION=execution_section,
             IMPROVEMENT_DIR=next_gen_directory,
-            TASK_MODEL_GUIDELINES_SECTION=guidelines_section,
+            TASK_MODEL_GUIDELINES_SECTION=_guidelines_section,
+            SCAFFOLD_DESIGN_GUIDELINES=SCAFFOLD_DESIGN_GUIDELINES,
+            TARGET_AGENT_SPEC=TARGET_AGENT_SPEC,
+            BEST_SCORE=f"{best_score_so_far:.4f}",
+            BEST_GEN=str(best_gen_so_far),
+            BEST_AGENT_SECTION=best_agent_section,
+            BEST_RESULTS_SECTION=best_results_section,
+            BEST_EXECUTION_SECTION=best_execution_section,
         )
 
         os.makedirs(next_gen_directory, exist_ok=True)
@@ -901,15 +840,26 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
         with open(feedback_prompt_path, 'w', encoding='utf-8') as f:
             f.write(feedback_agent_prompt_prepared)
         logger.info(f"  ✓ Saved feedback agent prompt to: {feedback_prompt_path}")
-        asyncio.run(
-            run_agent(
-                model_name=meta_model,
-                max_turns="20",
-                prompt=feedback_agent_prompt_prepared,
-                agent_working_directory=next_gen_directory,
-                backend=backend
+        MAX_FEEDBACK_RETRIES = 3
+        for _feedback_attempt in range(1, MAX_FEEDBACK_RETRIES + 1):
+            if _feedback_attempt > 1:
+                logger.warning(f"  ↻ Feedback agent retry {_feedback_attempt}/{MAX_FEEDBACK_RETRIES} — target_agent.py was not created in gen_{next_gen}")
+            asyncio.run(
+                run_agent(
+                    model_name=meta_model,
+                    max_turns="20",
+                    prompt=feedback_agent_prompt_prepared,
+                    agent_working_directory=next_gen_directory,
+                    backend=backend
+                )
             )
-        )
+            if Path(next_gen_directory, "target_agent.py").exists():
+                logger.info(f"  ✓ target_agent.py created by feedback agent (attempt {_feedback_attempt})")
+                break
+            logger.warning(f"  ✗ target_agent.py not found after feedback agent run (attempt {_feedback_attempt}/{MAX_FEEDBACK_RETRIES})")
+        else:
+            logger.error(f"  ✗ Feedback agent failed to create target_agent.py for gen_{next_gen} after {MAX_FEEDBACK_RETRIES} attempts — aborting")
+            sys.exit(1)
 
         logger.info(f"Feedback agent completed. Created improved agent for generation {next_gen}")
     else:

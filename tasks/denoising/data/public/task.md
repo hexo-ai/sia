@@ -47,29 +47,53 @@ def evaluate_poisson(train_data, test_data, denoised):
     from molecular_cross_validation.mcv_sweep import poisson_nll_loss
     import scprep
     test_X = scprep.utils.toarray(test_data)
-    train_X = scprep.utils.toarray(train_data)
-    denoised_X = np.asarray(denoised)
-    denoised_X = denoised_X / np.maximum(denoised_X.sum(axis=1, keepdims=True), 1e-12)
-    denoised_X *= train_X.sum(axis=1, keepdims=True)
-    return float(poisson_nll_loss(test_X, denoised_X).mean())
+    denoised_X = np.asarray(denoised).copy()
+    denoised_scaled = denoised_X * test_X.sum() / max(train_data.sum(), 1e-12)
+    return float(poisson_nll_loss(test_X, denoised_scaled).mean())
 ```
 
 ## Scoring
 
-**Poisson is a HARD CONSTRAINT.** Your solution is REJECTED if:
-- `poisson_norm = (0.257575 - poisson) / (0.257575 - 0.031739) < 0.97`
+Both metrics are normalized to [0, 1] and averaged:
 
-**Reward = MSE score only** (after passing Poisson constraint):
-- `mse_score = (0.304721 - mse) / (0.304721 - 0.000000)`
-- Higher score is better (range 0-1)
+```
+mse_norm     = (0.304721 - mse)     / (0.304721 - 0.000000)
+poisson_norm = (0.257575 - poisson) / (0.257575 - 0.031739)
+score        = (mse_norm + poisson_norm) / 2
+```
 
-Baseline values (MAGIC algorithm):
-- `baseline_mse = 0.304721`, `baseline_poisson = 0.257575`
-- `perfect_mse = 0.000000`, `perfect_poisson = 0.031739`
+Higher is better (range 0–1). MAGIC scores ~0.61 on this development benchmark.
+
+Normalization reference values (computed on pancreas):
+- `baseline_mse = 0.304721`, `baseline_poisson = 0.257575`  ← identity (no denoising)
+- `perfect_mse = 0.000000`, `perfect_poisson = 0.031739`    ← oracle upper bound
 
 ## Available Libraries
 
-numpy, scipy, sklearn, graphtools, scprep, scanpy, anndata, molecular_cross_validation
+numpy, scipy, sklearn, graphtools, scprep, scanpy, anndata, molecular_cross_validation, **magic-impute** (v3)
+
+The `magic-impute` library is installed. The recommended starting point (MAGIC with reversed normalization and approximate solver) scores ~0.61 on pancreas and ~0.64 on held-out datasets:
+
+```python
+import magic
+import numpy as np
+import scprep
+
+def magic_denoise(X, **kwargs):
+    X = np.asarray(X, dtype=float)
+    # Reversed norm order: sqrt first, then library-size normalize
+    X_sqrt = np.sqrt(X)
+    X_norm, libsize = scprep.normalize.library_size_normalize(
+        X_sqrt, rescale=1, return_library_size=True
+    )
+    Y = magic.MAGIC(solver="approximate", verbose=False).fit_transform(
+        X_norm, genes="all_genes"
+    )
+    Y = np.asarray(Y) ** 2
+    return np.maximum(Y * libsize[:, np.newaxis], 0)
+```
+
+**Start here and improve from this baseline.**
 
 ## Rules
 
@@ -96,7 +120,6 @@ Your working directory must contain at the end:
   "poisson": 0.035,
   "mse_norm": 0.87,
   "poisson_norm": 0.99,
-  "passed_poisson_constraint": true,
   "elapsed_seconds": 12.3,
   "error": null
 }
@@ -125,24 +148,19 @@ Run `python {dataset_dir}/evaluate.py solution.py` from your working directory t
 
 ## Generalization
 
-**The development dataset is `pancreas.h5ad` (pancreatic islet cells).** You evaluate against it during your run. But your final score is computed privately on two held-out datasets you never see:
-
-- **PBMC** — human peripheral blood mononuclear cells (immune cells: T cells, B cells, monocytes)
-- **Tabula** — multi-tissue atlas (diverse cell types from multiple organs)
+**The development dataset is `pancreas.h5ad` (pancreatic islet cells).** You evaluate against it during your run. But your final score is computed privately on two held-out datasets from entirely different tissues and cell types — datasets you never see during development.
 
 These tissues have completely different gene expression profiles. A solution tuned to pancreas will fail on them.
 
 This means:
 - Methods that fit parameters *to the pancreas data* (e.g. autoencoders, tissue-specific models) will likely fail on PBMC and Tabula.
 - Methods that use only the *structure of each dataset at inference time* (graph diffusion, PCA-based smoothing, low-rank approximation) generalize naturally because they adapt to whatever data they receive.
-- The Poisson constraint (`poisson_norm >= 0.97`) is specifically designed to detect solutions that overfit: a method that overfits the pancreas will typically have a collapsed Poisson NLL on other tissues.
-
 Prefer parameter-free or self-adapting approaches. MAGIC (graph diffusion over a k-NN graph) is the canonical baseline for this task precisely because it is tissue-agnostic.
 
 ## Tips
 
-- **NORMALIZATION ORDER MATTERS**: Denoise first, normalize later
+- **NORMALIZATION ORDER MATTERS**: For MAGIC, use reversed normalization order (sqrt first, then library-size normalize) — this is what achieves ~0.61 on pancreas and ~0.64 on private datasets
+- The MAGIC (approximate solver, reversed norm) approach: `sqrt(X)` → library_size_normalize → MAGIC(solver="approximate") → square → multiply by libsize
 - Square root transform is variance-stabilizing for Poisson distributions
 - Poisson loss is sensitive to small non-zero values
-- The baseline MAGIC algorithm with reversed normalization order achieves good Poisson scores
-- Focus on MSE reduction while maintaining Poisson ≥ 0.97 normalized
+- Focus on MSE reduction while maintaining Poisson norm ≥ 0.97

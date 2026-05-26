@@ -7,4 +7,5 @@ scprep
 graphtools
 numpy
 scipy
+magic-impute
 git+https://github.com/czbiohub-sf/molecular-cross-validation.git

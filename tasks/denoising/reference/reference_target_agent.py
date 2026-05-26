@@ -165,7 +165,17 @@ Calls to these tools must go to the commentary channel: 'functions'."""
 Write a `magic_denoise(X, **kwargs)` function and save it to `{solution_path}`.
 Then evaluate it by running: python {evaluate_path} {solution_path}
 
-Write and evaluate a solution as early as possible, then iterate to improve the score.
+**Start by using the `magic-impute` library directly** — this gives a score of ~0.61 immediately and is the correct baseline to build upon:
+
+```python
+import magic
+import numpy as np
+
+def magic_denoise(X, **kwargs):
+    return magic.MAGIC().fit_transform(X)
+```
+
+Evaluate this first, then iterate to improve: tune hyperparameters (knn, t, decay), try different normalization orders, combine with other smoothing approaches, etc.
 A per-turn status message will tell you how many turns and how much time remain — save your best solution after every improvement.
 
 Constraints:

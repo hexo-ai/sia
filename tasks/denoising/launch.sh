@@ -9,8 +9,8 @@ cd "${REPO_ROOT}"
 # ── Defaults ──────────────────────────────────────────────────────────────────
 RUN_ID=1
 MAX_GEN=20
-MAX_TURNS=40
-TARGET_AGENT_TIMEOUT=600
+MAX_TURNS=70
+TARGET_AGENT_TIMEOUT=1200
 TASK_MODEL_TEMPERATURE=0.3
 META_MODEL="gemini/gemini-3.1-pro-preview"
 #ASK_MODEL="tinker://openai/gpt-oss-120b"

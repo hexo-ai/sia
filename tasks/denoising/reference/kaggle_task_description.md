@@ -39,30 +39,49 @@ Two metrics are computed on the held-out 10% of molecules:
 
 ### Scoring
 
-**Poisson is a hard constraint.** Submissions are rejected if:
+Both metrics are normalized to [0, 1] and averaged:
+
 ```
-poisson_norm = (0.257575 − poisson) / (0.257575 − 0.031739) < 0.97
+mse_norm     = (0.304721 − mse)     / (0.304721 − 0.000000)
+poisson_norm = (0.257575 − poisson) / (0.257575 − 0.031739)
+score        = (mse_norm + poisson_norm) / 2    ∈ [0, 1], higher is better
 ```
 
-**Final score = MSE norm** (conditional on passing Poisson):
-```
-score = (0.304721 − mse) / (0.304721 − 0.000000)    ∈ [0, 1], higher is better
-```
+|                       | MSE    | Poisson | Score |
+|-----------------------|--------|---------|-------|
+| Baseline (no denoise) | 0.3047 | 0.2576  | 0.00  |
+| MAGIC (A,R)           | 0.2314 | 0.0369  | ~0.61 |
+| Perfect               | 0.0000 | 0.0317  | 1.00  |
 
-|                  | MSE    | Poisson |
-|------------------|--------|---------|
-| Baseline (MAGIC) | 0.3047 | 0.2576  |
-| Perfect          | 0.0000 | 0.0317  |
-
-The Poisson constraint is intentionally designed to detect overfitting: a method that memorizes pancreas structure typically collapses on PBMC and Tabula.
+A method that overfits pancreas will typically produce very high Poisson NLL on held-out tissues, which directly penalises the score.
 
 ## Baselines & Approach
 
-**MAGIC** (graph diffusion over a k-NN graph built on sqrt-transformed counts) is the canonical baseline. It is tissue-agnostic by design — it adapts to the local manifold structure of whatever dataset it receives.
+**Your starting point is MAGIC (A,R)** — MAGIC with approximate solver and reversed normalization order. It scores ~0.61 on the development set (pancreas) and **~0.64 on the private held-out sets**, matching the best classical baseline from the TTT-Discover paper.
 
-Methods that tend to generalize: graph diffusion, PCA-based smoothing, low-rank approximation, manifold imputation.  
-Methods that tend to fail on held-out tissues: autoencoders trained on pancreas, tissue-specific priors, fixed hyperparameters tuned by grid search on pancreas.
+```python
+import magic, numpy as np, scprep
+
+def magic_denoise(X, **kwargs):
+    X = np.asarray(X, dtype=float)
+    X_sqrt = np.sqrt(X)
+    X_norm, libsize = scprep.normalize.library_size_normalize(
+        X_sqrt, rescale=1, return_library_size=True
+    )
+    Y = magic.MAGIC(solver="approximate", verbose=False).fit_transform(
+        X_norm, genes="all_genes"
+    )
+    Y = np.asarray(Y) ** 2
+    return np.maximum(Y * libsize[:, np.newaxis], 0)
+```
+
+The key insight is **reversed normalization order**: apply sqrt variance-stabilization *before* library-size normalization (not after), then undo both transforms after diffusion. This substantially improves the Poisson score compared to vanilla MAGIC.
+
+**Your goal is to beat 0.64.** Scores above 0.70 have been achieved by LLM-guided search methods (OpenEvolve: 0.71, TTT-Discover: 0.72).
+
+Methods that tend to generalize beyond MAGIC: adaptive bandwidth graph diffusion, PCA-based smoothing with data-driven rank selection, low-rank approximation tuned per-dataset.  
+Methods that tend to fail on held-out tissues: autoencoders trained on pancreas, tissue-specific priors, fixed hyperparameters tuned by grid search.
 
 ## Available Libraries
 
-`numpy` · `scipy` · `sklearn` · `graphtools` · `scprep` · `scanpy` · `anndata` · `molecular_cross_validation`
+`numpy` · `scipy` · `sklearn` · `graphtools` · `scprep` · `scanpy` · `anndata` · `molecular_cross_validation` · `magic-impute` (v3)
