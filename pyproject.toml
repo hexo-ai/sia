@@ -31,6 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 claude = ["claude-agent-sdk>=0.1.50"]
 openhands = ["openhands-ai>=1.6.0"]
+mlebench = ["google-generativeai>=0.8"]
 dev = [
     "pytest>=7.0",
     "ruff>=0.11",
