@@ -1,0 +1,5 @@
+# Triton kernel cache and compilation artifacts
+__pycache__/
+*.ptx
+*.cubin
+.triton/
