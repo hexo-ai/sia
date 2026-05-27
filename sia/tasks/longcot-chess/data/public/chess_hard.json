@@ -1,0 +1,352 @@
+[
+  {
+    "question_id": "best_3_moves_hard_1",
+    "prompt": "You are given a chess position using this FEN: 8/8/4k2K/1pp5/3pP1P1/pP6/P1P5/8 b - - 0 38\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_2",
+    "prompt": "You are given a chess position using this FEN: 8/7p/p7/P4p1k/1K1B1P2/6P1/p3b2P/8 b - - 7 45\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_3",
+    "prompt": "You are given a chess position using this FEN: 8/5Q2/8/3P4/4K2p/6q1/6k1/8 b - - 0 57\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_4",
+    "prompt": "You are given a chess position using this FEN: 5k2/6R1/5P2/2pKP2p/p6P/3p4/r1P5/8 b - - 2 49\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_5",
+    "prompt": "You are given a chess position using this FEN: 8/8/3k4/1P2ppp1/2K4p/5PP1/7P/8 w - - 0 37\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_6",
+    "prompt": "You are given a chess position using this FEN: 8/7K/7P/8/5k2/8/2R1p1r1/8 b - - 0 50\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_7",
+    "prompt": "You are given a chess position using this FEN: 4R3/5p1k/5qpp/8/3P4/2r4P/3Q1P1K/8 b - - 3 40\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_1",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (51, 43)\nTarget Squares: [(64, 27), (9, 77), (53, 72), (26, 16), (18, 97), (46, 3), (84, 17), (66, 45), (88, 76), (80, 74), (67, 32), (17, 40), (88, 9), (37, 18), (71, 89), (68, 89), (81, 82), (80, 17), (34, 76), (5, 18), (48, 23), (32, 17), (22, 85), (39, 98), (9, 9), (19, 93), (80, 9), (50, 92), (70, 38), (1, 74)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_2",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (22, 3)\nTarget Squares: [(81, 9), (83, 2), (30, 79), (24, 68), (19, 13), (87, 39), (11, 2), (22, 58), (60, 0), (0, 51), (54, 11), (9, 28), (40, 66), (20, 4), (93, 46), (29, 19), (13, 73), (3, 62), (45, 48), (57, 60), (97, 35), (5, 62), (22, 57), (25, 62), (52, 71), (83, 80), (93, 2), (74, 54), (14, 83), (84, 24)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_3",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (81, 97)\nTarget Squares: [(9, 62), (80, 4), (23, 48), (11, 40), (14, 84), (65, 42), (87, 15), (89, 24), (38, 15), (66, 37), (11, 51), (78, 34), (6, 48), (36, 86), (8, 47), (22, 57), (7, 49), (99, 88), (98, 21), (93, 71), (54, 86), (52, 0), (82, 89), (77, 56), (71, 88), (98, 85), (63, 21), (83, 20), (95, 39), (20, 77)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_4",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (9, 25)\nTarget Squares: [(23, 78), (17, 27), (35, 3), (60, 11), (87, 54), (97, 80), (36, 95), (64, 49), (59, 33), (64, 69), (24, 26), (70, 81), (8, 78), (54, 72), (35, 43), (21, 71), (33, 23), (61, 28), (97, 29), (9, 21), (53, 34), (9, 72), (67, 60), (17, 58), (36, 34), (26, 93), (79, 98), (74, 90), (60, 47), (41, 67)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_5",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (80, 10)\nTarget Squares: [(67, 88), (65, 2), (93, 3), (30, 3), (89, 70), (8, 16), (26, 94), (16, 21), (57, 11), (97, 77), (39, 99), (44, 42), (94, 96), (71, 55), (85, 54), (91, 37), (52, 38), (18, 92), (82, 92), (86, 81), (41, 75), (14, 72), (61, 95), (91, 3), (58, 11), (28, 68), (60, 72), (58, 80), (86, 4), (60, 97)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_6",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (46, 95)\nTarget Squares: [(60, 93), (98, 79), (29, 4), (45, 51), (50, 90), (37, 98), (31, 54), (54, 63), (82, 37), (60, 42), (72, 17), (94, 98), (63, 42), (92, 8), (78, 24), (57, 10), (8, 36), (66, 21), (5, 48), (99, 11), (51, 77), (83, 62), (5, 88), (13, 30), (89, 28), (5, 77), (79, 79), (62, 28), (90, 32), (81, 10)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_7",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (28, 27)\nTarget Squares: [(63, 7), (13, 24), (93, 19), (95, 66), (7, 21), (95, 35), (81, 54), (85, 98), (60, 93), (2, 59), (33, 52), (26, 61), (14, 58), (75, 9), (10, 20), (96, 19), (15, 98), (24, 43), (52, 1), (55, 33), (72, 62), (76, 94), (31, 79), (13, 67), (98, 17), (5, 78), (52, 93), (32, 31), (99, 24), (77, 38)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_8",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (35, 75)\nTarget Squares: [(99, 65), (87, 89), (76, 26), (64, 92), (14, 43), (96, 98), (53, 48), (50, 94), (7, 43), (55, 52), (58, 36), (69, 1), (37, 54), (97, 86), (45, 81), (83, 42), (70, 68), (74, 51), (91, 34), (84, 39), (75, 11), (81, 14), (92, 47), (71, 15), (41, 36), (72, 68), (89, 7), (65, 30), (59, 29), (53, 38)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_9",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (65, 16)\nTarget Squares: [(92, 59), (0, 8), (5, 54), (40, 4), (7, 22), (9, 96), (60, 89), (12, 29), (59, 26), (24, 20), (20, 72), (64, 61), (0, 72), (35, 92), (61, 51), (36, 60), (25, 42), (21, 87), (47, 12), (67, 24), (21, 82), (5, 76), (49, 34), (94, 69), (14, 61), (74, 70), (29, 99), (60, 35), (9, 21), (84, 59)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_8",
+    "prompt": "You are given a chess position using this FEN: k3r3/1bR1b1p1/1p2Qn1p/p2p1P2/1q1P1B2/5NP1/6KP/2R5 b - - 3 30\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_10",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (55, 49)\nTarget Squares: [(34, 64), (49, 24), (68, 89), (47, 25), (29, 57), (48, 97), (48, 15), (47, 18), (2, 86), (59, 10), (32, 23), (8, 90), (28, 30), (73, 48), (28, 54), (34, 34), (35, 17), (29, 19), (91, 94), (96, 84), (79, 16), (80, 1), (32, 43), (70, 2), (99, 26), (55, 54), (24, 34), (11, 82), (58, 28), (35, 70)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_11",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (62, 80)\nTarget Squares: [(22, 22), (60, 92), (77, 79), (80, 92), (33, 90), (56, 32), (82, 53), (85, 31), (90, 57), (45, 56), (21, 91), (78, 69), (97, 26), (85, 40), (46, 38), (12, 26), (21, 50), (93, 28), (52, 43), (64, 78), (53, 37), (34, 39), (5, 52), (41, 90), (27, 34), (70, 78), (10, 89), (77, 66), (94, 21), (49, 94)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_12",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (36, 11)\nTarget Squares: [(65, 93), (88, 46), (15, 55), (22, 13), (5, 39), (56, 70), (98, 46), (28, 53), (30, 36), (23, 79), (48, 80), (48, 10), (61, 42), (20, 29), (31, 4), (88, 3), (1, 51), (1, 26), (68, 85), (55, 31), (87, 51), (66, 61), (56, 39), (87, 79), (90, 30), (94, 51), (52, 61), (71, 29), (72, 12), (31, 97)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_13",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (33, 81)\nTarget Squares: [(35, 34), (36, 75), (49, 45), (7, 84), (40, 28), (43, 83), (20, 23), (84, 81), (86, 93), (64, 20), (53, 86), (9, 46), (20, 2), (29, 77), (26, 23), (33, 79), (31, 71), (65, 81), (86, 32), (54, 16), (7, 79), (86, 31), (13, 25), (77, 28), (64, 80), (74, 0), (98, 90), (0, 65), (78, 61), (40, 64)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_14",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (37, 94)\nTarget Squares: [(17, 43), (11, 20), (12, 96), (21, 99), (25, 64), (24, 10), (17, 16), (66, 90), (33, 47), (60, 40), (96, 17), (63, 54), (23, 67), (86, 8), (19, 78), (14, 29), (36, 31), (94, 76), (97, 58), (45, 65), (21, 65), (67, 23), (17, 38), (43, 20), (21, 11), (60, 49), (12, 12), (16, 71), (23, 34), (95, 4)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_15",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (33, 69)\nTarget Squares: [(19, 93), (60, 93), (65, 64), (56, 41), (66, 19), (41, 69), (83, 88), (71, 34), (81, 95), (1, 17), (46, 16), (83, 50), (44, 90), (66, 35), (49, 37), (98, 62), (75, 45), (42, 99), (26, 51), (43, 28), (9, 39), (37, 27), (75, 61), (84, 82), (61, 58), (76, 8), (46, 99), (6, 42), (53, 12), (92, 7)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_16",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (15, 84)\nTarget Squares: [(71, 42), (71, 27), (5, 72), (61, 85), (69, 24), (39, 76), (35, 96), (46, 92), (26, 67), (86, 7), (43, 62), (89, 48), (89, 96), (80, 76), (42, 90), (44, 57), (55, 10), (66, 53), (20, 78), (65, 61), (32, 39), (78, 88), (1, 77), (19, 52), (23, 58), (14, 71), (11, 17), (1, 84), (73, 70), (61, 77)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_17",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (19, 4)\nTarget Squares: [(35, 78), (12, 16), (88, 80), (2, 85), (66, 35), (71, 34), (98, 1), (22, 68), (0, 40), (3, 1), (6, 93), (46, 12), (99, 92), (70, 62), (24, 89), (57, 64), (10, 9), (50, 73), (84, 44), (94, 23), (63, 80), (8, 50), (9, 18), (76, 99), (10, 69), (46, 91), (96, 92), (90, 25), (91, 51), (93, 78)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_18",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (68, 6)\nTarget Squares: [(73, 65), (54, 90), (18, 99), (7, 20), (79, 18), (51, 32), (97, 54), (65, 42), (62, 79), (20, 87), (51, 81), (27, 34), (46, 17), (56, 9), (21, 28), (19, 9), (60, 66), (86, 59), (11, 30), (69, 55), (90, 85), (75, 90), (98, 4), (37, 72), (25, 28), (19, 0), (41, 55), (71, 6), (69, 85), (15, 60)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_19",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (42, 68)\nTarget Squares: [(21, 73), (5, 27), (69, 93), (83, 83), (50, 67), (30, 45), (4, 66), (13, 91), (37, 35), (0, 25), (15, 1), (40, 52), (3, 64), (86, 55), (50, 92), (95, 81), (96, 55), (14, 76), (26, 81), (65, 21), (56, 85), (78, 20), (88, 45), (51, 1), (39, 24), (96, 3), (63, 20), (61, 40), (95, 90), (82, 46)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_9",
+    "prompt": "You are given a chess position using this FEN: r6N/pQpk2pp/3bp3/5b2/7q/1KN1p3/PP1P1PPP/R1B4R b - - 0 14\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_20",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (72, 48)\nTarget Squares: [(93, 72), (42, 94), (52, 17), (4, 76), (45, 27), (61, 75), (78, 23), (1, 83), (74, 70), (50, 35), (15, 48), (1, 43), (77, 24), (37, 75), (31, 34), (57, 58), (94, 51), (39, 98), (68, 66), (18, 62), (47, 72), (71, 34), (41, 89), (79, 28), (84, 65), (77, 43), (9, 15), (74, 48), (60, 61), (52, 99)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_21",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (2, 76)\nTarget Squares: [(7, 25), (85, 46), (71, 31), (99, 34), (73, 13), (36, 49), (44, 36), (37, 35), (81, 85), (48, 88), (74, 72), (24, 32), (86, 99), (96, 95), (44, 10), (29, 26), (4, 90), (90, 9), (65, 99), (4, 25), (89, 80), (78, 13), (36, 85), (85, 25), (48, 14), (51, 40), (82, 29), (27, 11), (59, 42), (72, 8)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_22",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (56, 7)\nTarget Squares: [(40, 10), (44, 76), (88, 20), (23, 0), (7, 4), (47, 33), (86, 40), (30, 52), (92, 32), (53, 91), (99, 88), (42, 23), (68, 70), (90, 58), (43, 64), (62, 6), (90, 84), (61, 29), (27, 13), (0, 76), (35, 53), (65, 46), (0, 24), (60, 32), (13, 36), (80, 22), (96, 73), (30, 3), (28, 92), (3, 29)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_23",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (28, 83)\nTarget Squares: [(20, 47), (98, 13), (18, 40), (51, 97), (38, 60), (55, 91), (39, 53), (54, 57), (77, 65), (34, 19), (5, 7), (17, 66), (48, 53), (62, 67), (25, 3), (68, 55), (31, 39), (19, 75), (51, 4), (38, 49), (98, 91), (4, 41), (1, 70), (27, 4), (27, 70), (17, 26), (8, 95), (14, 48), (35, 53), (67, 86)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_24",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (77, 33)\nTarget Squares: [(60, 20), (75, 63), (3, 91), (3, 4), (77, 6), (82, 82), (23, 9), (18, 64), (52, 48), (39, 38), (49, 10), (47, 44), (27, 12), (94, 24), (11, 59), (53, 22), (40, 24), (41, 6), (84, 30), (53, 98), (12, 64), (13, 32), (45, 94), (98, 91), (76, 84), (24, 38), (0, 28), (19, 37), (52, 47), (76, 67)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_25",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (74, 23)\nTarget Squares: [(60, 82), (12, 10), (90, 60), (15, 66), (59, 34), (96, 12), (18, 24), (81, 12), (60, 83), (37, 24), (96, 72), (77, 28), (21, 44), (69, 0), (44, 38), (59, 54), (80, 5), (70, 44), (83, 6), (84, 18), (48, 31), (3, 15), (56, 71), (63, 45), (39, 94), (41, 81), (54, 27), (86, 55), (1, 85), (33, 45)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_26",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (45, 84)\nTarget Squares: [(78, 33), (51, 59), (83, 47), (89, 24), (95, 26), (97, 96), (94, 74), (63, 71), (33, 90), (35, 95), (20, 58), (84, 65), (24, 5), (97, 44), (43, 1), (44, 76), (60, 40), (88, 74), (93, 84), (22, 63), (87, 26), (84, 48), (6, 81), (32, 7), (2, 33), (73, 79), (41, 29), (1, 89), (41, 38), (38, 2)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_27",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (49, 42)\nTarget Squares: [(0, 5), (50, 62), (76, 93), (44, 38), (77, 26), (2, 92), (56, 23), (48, 76), (49, 50), (60, 5), (99, 33), (96, 36), (68, 45), (44, 43), (24, 33), (88, 54), (14, 79), (88, 10), (5, 49), (50, 97), (58, 90), (17, 82), (93, 42), (90, 61), (6, 58), (21, 79), (60, 4), (69, 42), (37, 71), (17, 99)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_28",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (49, 62)\nTarget Squares: [(42, 21), (9, 34), (0, 69), (68, 99), (79, 22), (70, 58), (37, 71), (21, 98), (88, 65), (24, 65), (10, 41), (15, 41), (19, 65), (87, 43), (60, 15), (70, 39), (73, 51), (56, 0), (8, 98), (64, 94), (43, 6), (1, 78), (11, 21), (18, 39), (22, 50), (9, 59), (81, 16), (49, 6), (15, 12), (46, 10)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_29",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (29, 98)\nTarget Squares: [(10, 3), (13, 17), (89, 1), (0, 51), (69, 21), (88, 89), (8, 25), (35, 67), (31, 3), (78, 20), (6, 36), (41, 35), (1, 46), (6, 84), (60, 35), (60, 15), (0, 91), (31, 74), (1, 69), (4, 70), (99, 91), (96, 43), (55, 77), (63, 96), (80, 53), (20, 37), (42, 41), (91, 43), (2, 45), (97, 62)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_10",
+    "prompt": "You are given a chess position using this FEN: 2k5/p5q1/4p3/1ppr1p2/3n4/4Q3/P2R1PPP/4R1K1 b - - 1 26\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_30",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (52, 17)\nTarget Squares: [(97, 13), (40, 91), (11, 82), (27, 59), (15, 16), (94, 7), (93, 6), (34, 85), (77, 66), (24, 73), (36, 1), (80, 23), (59, 10), (49, 44), (97, 25), (52, 97), (29, 89), (55, 77), (10, 54), (54, 54), (88, 26), (86, 39), (65, 76), (42, 64), (40, 48), (47, 28), (23, 58), (98, 28), (30, 26), (78, 97)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_31",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (65, 5)\nTarget Squares: [(71, 10), (95, 51), (85, 89), (72, 33), (53, 84), (26, 65), (88, 98), (39, 46), (61, 99), (23, 20), (89, 35), (39, 81), (0, 34), (89, 70), (95, 10), (98, 78), (82, 68), (18, 50), (24, 2), (67, 66), (62, 62), (94, 35), (50, 55), (96, 19), (37, 61), (31, 53), (14, 40), (14, 28), (17, 81), (54, 99)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_32",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (42, 31)\nTarget Squares: [(9, 21), (26, 87), (40, 48), (43, 10), (15, 4), (60, 96), (22, 20), (62, 48), (59, 35), (7, 4), (90, 51), (22, 63), (41, 67), (64, 5), (12, 78), (20, 23), (42, 49), (31, 35), (51, 33), (24, 74), (63, 2), (30, 23), (36, 46), (82, 96), (0, 93), (9, 2), (3, 70), (45, 52), (83, 9), (30, 48)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_33",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (66, 24)\nTarget Squares: [(98, 95), (17, 33), (64, 90), (91, 53), (22, 94), (57, 14), (68, 53), (85, 55), (14, 91), (24, 31), (47, 54), (73, 28), (91, 91), (48, 95), (83, 72), (95, 86), (29, 40), (70, 13), (39, 10), (46, 83), (37, 58), (85, 93), (11, 62), (45, 2), (64, 22), (23, 90), (88, 39), (58, 67), (29, 6), (99, 79)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_34",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (42, 24)\nTarget Squares: [(43, 14), (86, 21), (62, 67), (22, 83), (43, 74), (91, 37), (68, 8), (39, 46), (69, 29), (36, 72), (39, 95), (3, 27), (99, 54), (93, 72), (50, 66), (51, 45), (3, 28), (59, 60), (7, 8), (15, 50), (95, 23), (30, 19), (92, 26), (42, 59), (91, 36), (9, 64), (86, 41), (32, 52), (81, 73), (71, 83)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_35",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (16, 55)\nTarget Squares: [(99, 68), (68, 78), (28, 47), (36, 35), (75, 35), (23, 62), (41, 24), (61, 96), (94, 57), (63, 38), (81, 30), (53, 44), (60, 63), (35, 88), (65, 46), (83, 95), (30, 11), (5, 28), (50, 59), (49, 42), (85, 43), (75, 96), (83, 7), (82, 37), (79, 55), (6, 93), (38, 90), (66, 45), (92, 70), (43, 12)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_36",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (40, 19)\nTarget Squares: [(50, 78), (33, 85), (75, 62), (29, 9), (62, 69), (19, 31), (39, 63), (72, 39), (82, 82), (26, 96), (53, 99), (77, 56), (33, 68), (99, 41), (61, 75), (58, 78), (87, 21), (57, 85), (96, 67), (46, 99), (68, 44), (61, 7), (41, 31), (38, 13), (38, 68), (50, 99), (78, 87), (94, 91), (67, 99), (50, 35)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_37",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (66, 2)\nTarget Squares: [(27, 32), (15, 52), (95, 45), (80, 53), (81, 88), (58, 98), (74, 22), (2, 73), (78, 73), (61, 31), (71, 81), (14, 17), (61, 98), (79, 64), (25, 82), (54, 23), (58, 51), (1, 11), (22, 93), (49, 20), (97, 88), (92, 17), (28, 18), (67, 79), (26, 69), (59, 12), (41, 53), (43, 42), (94, 27), (88, 45)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_38",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (9, 8)\nTarget Squares: [(51, 19), (18, 28), (61, 4), (31, 46), (29, 73), (63, 19), (35, 4), (69, 54), (17, 63), (88, 49), (17, 65), (73, 28), (41, 90), (48, 15), (34, 59), (25, 65), (1, 21), (61, 86), (73, 40), (46, 79), (69, 85), (11, 68), (40, 11), (66, 7), (6, 80), (50, 67), (56, 29), (47, 55), (5, 80), (2, 45)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "knight_path_hard_39",
+    "prompt": "There is a chess board of size 100x100 and certain target squares. Calculate the minimum number of moves it takes for the knight at the given starting position to touch all the target squares. Both target squares and the starting position is given in a 0-indexed format:\n\nStarting Postion: (35, 51)\nTarget Squares: [(59, 78), (50, 84), (60, 14), (48, 93), (23, 41), (97, 51), (37, 89), (49, 36), (53, 2), (19, 47), (30, 54), (72, 0), (51, 29), (75, 73), (50, 89), (63, 89), (52, 84), (82, 54), (42, 68), (5, 4), (78, 70), (88, 66), (97, 64), (35, 55), (13, 99), (79, 25), (36, 36), (57, 83), (48, 41), (5, 55)]\n\nReturn your answer in the format: solution = <integer>",
+    "problem": {
+      "template": "knight_path"
+    }
+  },
+  {
+    "question_id": "best_3_moves_hard_11",
+    "prompt": "You are given a chess position using this FEN: 2kr3r/ppq1b3/2p2p1p/4nN2/2bPN3/7P/PPP1QPP1/R3R1K1 w - - 1 20\nGive the 3 best next moves in this position using the Standard Algebraic Notation (SAN) format. Return your answer in the format: solution = [move1, move2, move3]",
+    "problem": {
+      "template": "best_3_moves"
+    }
+  }
+]

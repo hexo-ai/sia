@@ -1,0 +1,9 @@
+name: sia
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pip=23.2.1
+  - packaging
+  - pip:
+    - ipykernel

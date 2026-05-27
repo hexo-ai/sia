@@ -1,0 +1,95 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sia-agent"
+version = "0.2.1"
+description = "SIA: Self-Improving Auto-researcher — an autonomous AI scientist framework"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Hexo", email = "sia@hexo.ai" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = ["ai", "research", "self-improving", "agents", "science"]
+dependencies = [
+    "python-dotenv>=1.0",
+    "numpy>=2.0",
+    "pandas>=2.0",
+    "scikit-learn>=1.4",
+]
+
+[project.optional-dependencies]
+claude = ["claude-agent-sdk>=0.1.50"]
+openhands = ["openhands-ai>=1.6.0"]
+mlebench = ["google-generativeai>=0.8"]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.11",
+]
+
+[project.scripts]
+sia = "sia.orchestrator:main"
+
+[project.urls]
+Homepage = "https://github.com/hexo-ai/sia"
+Repository = "https://github.com/hexo-ai/sia"
+
+[tool.setuptools.packages.find]
+include = ["sia*"]
+
+[tool.setuptools.package-data]
+"sia.tasks" = [
+    "_shared/*",
+    "*/data/public/**/*",
+    "*/data/private/**/*",
+    "*/data/training_data/**/*",
+    "*/reference/**/*",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+# Task reference agents and sample executions are shipped as template data,
+# read by the meta-agent as text. They are not part of the package source.
+extend-exclude = ["sia/tasks/"]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "RUF",   # ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B905",  # zip without strict= (python 3.10 compat)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sia"]
+
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+# Task reference agents are shipped as templates (read as text by the meta-agent),
+# not as importable source. Skip type-checking them.
+exclude = ["sia/tasks/"]
+
+[tool.ty.rules]
+not-iterable = "ignore"        # false positive on guarded attribute access
+unresolved-import = "warn"     # tests use sys.path manipulation

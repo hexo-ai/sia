@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install package
+        run: |
+          uv pip install --system -e ".[dev]"
+
+      - name: Verify CLI entry point
+        run: |
+          sia --help
+
+      - name: Verify package imports
+        run: |
+          python -c "from sia.orchestrator import main, load_agent_execution; print('orchestrator OK')"
+          python -c "from sia.context_manager import ContextManager; print('context_manager OK')"
+          python -c "from sia.util import run_agent; print('util OK')"
+
+      - name: Build package
+        run: |
+          uv pip install --system build
+          python -m build --sdist --wheel
+
+      - name: Verify built artifacts
+        run: |
+          ls -la dist/
+          test -f dist/*.tar.gz
+          test -f dist/*.whl
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install package with test dependencies
+        run: |
+          uv pip install --system -e ".[dev]"
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install linters
+        run: |
+          uv pip install --system ruff ty
+
+      - name: Ruff check
+        run: ruff check sia/ tests/
+
+      - name: Ruff format check
+        run: ruff format --check sia/ tests/
+
+      - name: Type check with ty
+        run: ty check sia/

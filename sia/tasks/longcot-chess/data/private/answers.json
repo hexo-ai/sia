@@ -1,0 +1,96 @@
+{
+  "best_3_moves_hard_1": [
+    "c4",
+    "bxc4",
+    "bxc4"
+  ],
+  "best_3_moves_hard_2": [
+    "Kg4",
+    "Kb3",
+    "Kh3"
+  ],
+  "best_3_moves_hard_3": [
+    "h3",
+    "d6",
+    "h2"
+  ],
+  "best_3_moves_hard_4": [
+    "d2",
+    "Ke6",
+    "d1=Q"
+  ],
+  "best_3_moves_hard_5": [
+    "g4",
+    "f4",
+    "h3"
+  ],
+  "best_3_moves_hard_6": [
+    "Rf2",
+    "Rxe2",
+    "Rxe2"
+  ],
+  "best_3_moves_hard_7": [
+    "Rf3",
+    "Kg2",
+    "Qf5"
+  ],
+  "knight_path_hard_1": "218",
+  "knight_path_hard_2": "218",
+  "knight_path_hard_3": "217",
+  "knight_path_hard_4": "226",
+  "knight_path_hard_5": "230",
+  "knight_path_hard_6": "245",
+  "knight_path_hard_7": "234",
+  "knight_path_hard_8": "204",
+  "knight_path_hard_9": "222",
+  "best_3_moves_hard_8": [
+    "Bd8",
+    "Rc8+",
+    "Ka7"
+  ],
+  "knight_path_hard_10": "200",
+  "knight_path_hard_11": "199",
+  "knight_path_hard_12": "245",
+  "knight_path_hard_13": "218",
+  "knight_path_hard_14": "219",
+  "knight_path_hard_15": "230",
+  "knight_path_hard_16": "232",
+  "knight_path_hard_17": "251",
+  "knight_path_hard_18": "245",
+  "knight_path_hard_19": "249",
+  "best_3_moves_hard_9": [
+    "Bd3",
+    "Ne4",
+    "Bxe4"
+  ],
+  "knight_path_hard_20": "210",
+  "knight_path_hard_21": "231",
+  "knight_path_hard_22": "231",
+  "knight_path_hard_23": "248",
+  "knight_path_hard_24": "232",
+  "knight_path_hard_25": "223",
+  "knight_path_hard_26": "225",
+  "knight_path_hard_27": "240",
+  "knight_path_hard_28": "219",
+  "knight_path_hard_29": "248",
+  "best_3_moves_hard_10": [
+    "Re5",
+    "Qxe5",
+    "Nf3+"
+  ],
+  "knight_path_hard_30": "224",
+  "knight_path_hard_31": "238",
+  "knight_path_hard_32": "239",
+  "knight_path_hard_33": "225",
+  "knight_path_hard_34": "224",
+  "knight_path_hard_35": "238",
+  "knight_path_hard_36": "213",
+  "knight_path_hard_37": "236",
+  "knight_path_hard_38": "212",
+  "knight_path_hard_39": "229",
+  "best_3_moves_hard_11": [
+    "Qe3",
+    "Ng6",
+    "Nd2"
+  ]
+}
