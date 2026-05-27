@@ -244,6 +244,8 @@ Each task directory must follow this structure:
 Use the `prepare_mlebench_dataset.py` script to prepare a task dataset from MLE-Bench:
 
 ```bash
+pip install 'sia-agent[mlebench]'
+pip install git+https://github.com/openai/mle-bench
 python orchestration/prepare_mlebench_dataset.py -c "spaceship-titanic"
 ```
 
