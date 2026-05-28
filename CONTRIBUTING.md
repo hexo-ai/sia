@@ -1,6 +1,6 @@
 # Contributing to SIA
 
-Thank you for your interest in contributing to SIA (Self-Improving Auto-researcher). This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to SIA (Self-Improving AI). This document provides guidelines for contributing to the project.
 
 ## How to Contribute
 

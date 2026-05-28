@@ -278,7 +278,7 @@ def _print_welcome():
 .----)   |   |  |  /  _____  \
 |_______/    |__| /__/     \__\
 
-    Self-Improving Auto-researcher — an autonomous AI scientist
+    Self-Improving AI framework
 
     • Version : v{__version__}
     • Docs    : https://github.com/hexo-ai/sia

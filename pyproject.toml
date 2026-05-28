@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sia-agent"
 version = "0.2.1"
-description = "SIA: Self-Improving Auto-researcher — an autonomous AI scientist framework"
+description = "SIA: Self-Improving AI framework"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
