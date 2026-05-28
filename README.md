@@ -7,7 +7,7 @@
 
 Official implementation of [**SIA: Self Improving AI with Harness & Weight Updates**](https://arxiv.org/abs/2605.27276) (Hebbar et al., 2026) — a self-improving loop where a language-model agent updates both the harness and the weights of a task-specific agent. The paper reports a 56.6% gain on LawBench, 91.9% runtime reduction on GPU kernels, and 502% improvement on single-cell RNA denoising over baseline.
 
-Our goal is to build a self-improving AI scientist that can autonomously go ahead and improve its performance on scientific tasks.
+SIA is a Self Improving AI framework to autonomously improve the performance of any AI system (Model / Agent) on a benchmark task.
 
 > **Just want to try it?** Skip to [Run SIA locally](#2-run-sia-locally-with-built-in-tasks).
 
@@ -20,7 +20,7 @@ SIA operates by coordinating three main types of AI agents that work together to
 
 ### Glossary
 1. **Meta-Agent**: Reads the task description and generates an initial Target Agent tailored to the task.
-2. **Target Agent**: Attempts to complete the task and records its actions and results.
+2. **Target / Task Specific Agent**: Attempts to complete the task and records its actions and results.
 3. **Feedback/Improvement Agent**: Reviews the Target Agent's performance logs, identifies improvements, and updates the Target Agent accordingly.
 
 This iterative process allows the system to autonomously refine and enhance its ability to solve scientific tasks.
