@@ -34,6 +34,13 @@ class Config:
     SHELL_TIMEOUT: int = 30
     EVAL_TIMEOUT: int = 600
 
+    # Sandbox settings
+    SANDBOX_MODE: str = "none"  # "none" or "docker"
+    DOCKER_IMAGE: str = "python:3.11-slim"
+    DOCKER_MEMORY_LIMIT: str = "2g"
+    DOCKER_CPU_LIMIT: float = 2.0
+    DOCKER_TIMEOUT: int = 3600  # seconds
+
     # File size limits (bytes)
     MAX_CONTEXT_FILE_SIZE: int = 10_000_000  # 10 MB
     MAX_EXECUTION_LOG_SIZE: int = 50_000_000  # 50 MB
@@ -61,6 +68,7 @@ class Config:
             "SIA_MAX_GENERATIONS": ("DEFAULT_MAX_GENERATIONS", int),
             "SIA_BACKEND": ("DEFAULT_BACKEND", str),
             "SIA_MAX_TURNS": ("DEFAULT_MAX_TURNS", str),
+            "SIA_SANDBOX_MODE": ("SANDBOX_MODE", str),
         }
         for env_var, (attr, converter) in env_map.items():
             val = os.environ.get(env_var)

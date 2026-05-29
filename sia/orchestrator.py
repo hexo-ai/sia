@@ -293,6 +293,45 @@ def _print_welcome():
     print(banner)
 
 
+def _run_target_agent_sandboxed(
+    python_exec: str,
+    target_agent_path: str,
+    dataset_dir: str,
+    working_dir: str,
+    stdout_log_file: str,
+    config: Config,
+) -> int:
+    """Run target agent inside a Docker container for isolation.
+
+    Mounts dataset_dir as read-only and working_dir as read-write.
+    Network access is disabled.
+    """
+    docker_cmd = [
+        "docker", "run", "--rm",
+        "--network", "none",
+        "--memory", config.DOCKER_MEMORY_LIMIT,
+        f"--cpus={config.DOCKER_CPU_LIMIT}",
+        "-v", f"{dataset_dir}:/data:ro",
+        "-v", f"{working_dir}:/work:rw",
+        config.DOCKER_IMAGE,
+        "python", "-u", "/work/target_agent.py",
+        "--dataset_dir", "/data",
+        "--working_dir", "/work",
+    ]
+
+    with open(stdout_log_file, "w", encoding="utf-8") as log_fh:
+        process = subprocess.Popen(
+            docker_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for line in process.stdout:
+            print(line, end="")
+            log_fh.write(line)
+        return process.wait()
+
+
 def main():
     _print_welcome()
 
@@ -333,6 +372,13 @@ def main():
         default=env_config.DEFAULT_BACKEND,
         choices=["claude", "openhands"],
         help="Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)",
+    )
+    parser.add_argument(
+        "--sandbox",
+        type=str,
+        default=env_config.SANDBOX_MODE,
+        choices=["none", "docker"],
+        help="Sandbox mode for target agent execution: none (default) or docker (requires Docker)",
     )
     args = parser.parse_args()
 
@@ -654,20 +700,30 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
         try:
             python_exec = os.path.join(venv_dir, "bin", "python")
 
-            with open(stdout_log_file, "w", encoding="utf-8") as log_fh:
-                process = subprocess.Popen(
-                    [python_exec, "-u", target_agent_path,
-                     "--dataset_dir", ABS_DATASET_DIRECTORY,
-                     "--working_dir", current_gen_directory],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
+            if args.sandbox == "docker":
+                return_code = _run_target_agent_sandboxed(
+                    python_exec=python_exec,
+                    target_agent_path=target_agent_path,
+                    dataset_dir=ABS_DATASET_DIRECTORY,
+                    working_dir=current_gen_directory,
+                    stdout_log_file=stdout_log_file,
+                    config=env_config,
                 )
-                # Stream output to both console and log file
-                for line in process.stdout:
-                    print(line, end="")
-                    log_fh.write(line)
-                return_code = process.wait()
+            else:
+                with open(stdout_log_file, "w", encoding="utf-8") as log_fh:
+                    process = subprocess.Popen(
+                        [python_exec, "-u", target_agent_path,
+                         "--dataset_dir", ABS_DATASET_DIRECTORY,
+                         "--working_dir", current_gen_directory],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                    )
+                    # Stream output to both console and log file
+                    for line in process.stdout:
+                        print(line, end="")
+                        log_fh.write(line)
+                    return_code = process.wait()
 
             # Read captured output from file for feedback agent
             with open(stdout_log_file, encoding="utf-8") as f:
