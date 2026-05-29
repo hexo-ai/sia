@@ -59,6 +59,7 @@ from importlib.resources import files as resource_files
 from pathlib import Path
 
 from sia import __version__
+from sia.config import Config
 from sia.context_manager import ContextManager
 from sia.util import run_agent
 
@@ -292,7 +293,7 @@ def main():
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run the orchestrator for agent evolution")
-    parser.add_argument("--max_gen", type=int, default=3, help="Maximum number of generations to run (default: 3)")
+    parser.add_argument("--max_gen", type=int, default=Config.DEFAULT_MAX_GENERATIONS, help="Maximum number of generations to run (default: 3)")
     parser.add_argument("--run_id", type=int, default=1, help="Run ID for this experiment (default: 1)")
     task_group = parser.add_mutually_exclusive_group(required=True)
     task_group.add_argument(
@@ -315,13 +316,13 @@ def main():
     parser.add_argument(
         "--task_model",
         type=str,
-        default="claude-haiku-4-5-20251001",
+        default=Config.DEFAULT_TASK_MODEL,
         help="Model to use for target agent (default: claude-haiku-4-5-20251001)",
     )
     parser.add_argument(
         "--backend",
         type=str,
-        default="claude",
+        default=Config.DEFAULT_BACKEND,
         choices=["claude", "openhands"],
         help="Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)",
     )
@@ -335,11 +336,11 @@ def main():
     # Set default meta_model based on backend if not explicitly provided
     if args.meta_model is None:
         if backend == "openhands":
-            meta_model = "gemini/gemini-3.1-pro-preview"
-            logger.info("Using default OpenHands model: gemini/gemini-3.1-pro-preview")
+            meta_model = Config.DEFAULT_OPENHANDS_META_MODEL
+            logger.info(f"Using default OpenHands model: {Config.DEFAULT_OPENHANDS_META_MODEL}")
         else:
-            meta_model = "haiku"
-            logger.info("Using default Claude model: haiku")
+            meta_model = Config.DEFAULT_CLAUDE_META_MODEL
+            logger.info(f"Using default Claude model: {Config.DEFAULT_CLAUDE_META_MODEL}")
     else:
         meta_model = args.meta_model
 
@@ -395,17 +396,7 @@ def main():
     venv_dir = os.path.join(RUN_DIRECTORY, "venv")
     logger.info(f"Creating virtual environment at: {venv_dir}")
 
-    packages = [
-        "anthropic",
-        "openai",
-        "python-dotenv",
-        "google-genai",
-        "tqdm",
-        "pydantic",
-        "scikit-learn",
-        "pandas",
-        "numpy",
-    ]
+    packages = Config.VENV_PACKAGES
 
     if shutil.which("uv"):
         subprocess.run(["uv", "venv", venv_dir], check=True)
@@ -604,7 +595,7 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
     asyncio.run(
         run_agent(
             model_name=meta_model,
-            max_turns="20",
+            max_turns=Config.DEFAULT_MAX_TURNS,
             prompt=META_AGENT_PROMPT,
             agent_working_directory=META_AGENT_WORKING_DIRECTORY,
             backend=backend,
@@ -894,7 +885,7 @@ STDERR:
             asyncio.run(
                 run_agent(
                     model_name=meta_model,
-                    max_turns="20",
+                    max_turns=Config.DEFAULT_MAX_TURNS,
                     prompt=feedback_agent_prompt_prepared,
                     agent_working_directory=next_gen_directory,
                     backend=backend,
