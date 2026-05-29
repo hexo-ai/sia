@@ -641,38 +641,38 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
         target_agent_stderr = ""
         target_agent_error_msg = ""
 
-        # Create log file paths
+        # Create log file path
         stdout_log_file = os.path.join(current_gen_directory, "target_agent_stdout.log")
-        stderr_log_file = os.path.join(current_gen_directory, "target_agent_stderr.log")
 
         logger.info(f"  → Stdout log: {stdout_log_file}")
-        logger.info(f"  → Stderr log: {stderr_log_file}")
         logger.info("=" * 60)
 
         # Start timing for this generation
         generation_start_time = time.time()
 
-        # Run target agent with real-time output using shell redirection
+        # Run target agent with real-time output streaming
         try:
-            # Build command with tee for real-time display and logging
-            # Use PIPEFAIL to catch failures in the python command, not just tee
             python_exec = os.path.join(venv_dir, "bin", "python")
-            command = f"set -o pipefail; {python_exec} -u {target_agent_path} --dataset_dir {ABS_DATASET_DIRECTORY} --working_dir {current_gen_directory} 2>&1 | tee {stdout_log_file}"
 
-            # Run with shell=True and bash to enable pipefail
-            result = subprocess.run(
-                command,
-                shell=True,
-                text=True,
-                executable="/bin/bash",  # Use bash to support pipefail
-            )
-
-            return_code = result.returncode
+            with open(stdout_log_file, "w", encoding="utf-8") as log_fh:
+                process = subprocess.Popen(
+                    [python_exec, "-u", target_agent_path,
+                     "--dataset_dir", ABS_DATASET_DIRECTORY,
+                     "--working_dir", current_gen_directory],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                # Stream output to both console and log file
+                for line in process.stdout:
+                    print(line, end="")
+                    log_fh.write(line)
+                return_code = process.wait()
 
             # Read captured output from file for feedback agent
-            with open(stdout_log_file) as f:
+            with open(stdout_log_file, encoding="utf-8") as f:
                 target_agent_stdout = f.read()
-            # Since we're using 2>&1, stderr is merged into stdout
+            # Since we merged stderr into stdout, stderr is empty
             target_agent_stderr = ""
 
             logger.info("=" * 60)
@@ -697,9 +697,9 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
             logger.exception(f"  ✗ {target_agent_error_msg}")
             logger.warning("  → Continuing with feedback agent despite target agent failure")
 
-            # Try to read any partial logs
+            # Partial logs are already flushed to disk line-by-line
             try:
-                with open(stdout_log_file) as f:
+                with open(stdout_log_file, encoding="utf-8") as f:
                     target_agent_stdout = f.read()
             except OSError:
                 pass  # If log files don't exist, keep empty strings
