@@ -165,7 +165,7 @@ class ContextManager:
                     print(f"Warning: Could not generate LLM summary for Generation {gen_num}")
                     return None
 
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             print(f"Warning: Error generating LLM summary: {e}")
             return None
 
@@ -320,7 +320,7 @@ class ContextManager:
                 lines = len(f.readlines())
             size = os.path.getsize(agent_path)
             return {"size": size, "lines": lines}
-        except Exception as e:
+        except OSError as e:
             print(f"Warning: Could not get agent stats: {e}")
             return {"size": 0, "lines": 0}
 
@@ -348,7 +348,7 @@ class ContextManager:
                         elif isinstance(value, list) and len(value) > 0:
                             # Skip lists
                             continue
-            except Exception as e:
+            except (json.JSONDecodeError, OSError) as e:
                 print(f"Warning: Could not parse results.json: {e}")
 
         # Priority 2: detailed_results.json
@@ -361,7 +361,7 @@ class ContextManager:
                     for key, value in data.items():
                         if isinstance(value, (int, float, str, bool)):
                             metrics[key] = value
-            except Exception as e:
+            except (json.JSONDecodeError, OSError) as e:
                 print(f"Warning: Could not parse detailed_results.json: {e}")
 
         # Priority 3: Parse stdout
@@ -408,7 +408,7 @@ class ContextManager:
                                 break
                             except (ValueError, TypeError):
                                 continue
-        except Exception as e:
+        except OSError as e:
             print(f"Warning: Could not parse stdout metrics: {e}")
 
         return metrics
@@ -440,7 +440,7 @@ class ContextManager:
                 ]
 
                 insights = meaningful_insights[:5]
-        except Exception as e:
+        except OSError as e:
             print(f"Warning: Could not extract insights: {e}")
 
         return insights
