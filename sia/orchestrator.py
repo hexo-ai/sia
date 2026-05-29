@@ -142,7 +142,7 @@ def load_agent_execution(gen_directory):
             except json.JSONDecodeError as e:
                 logger.warning(f"  ✗ Failed to parse {os.path.basename(f)}: {e}")
                 trajectories.append({"error": str(e), "file": os.path.basename(f)})
-            except Exception as e:
+            except (OSError, KeyError) as e:
                 logger.warning(f"  ✗ Error reading {os.path.basename(f)}: {e}")
                 trajectories.append({"error": str(e), "file": os.path.basename(f)})
 
@@ -174,7 +174,7 @@ def load_agent_execution(gen_directory):
                     "parse_error": str(e),
                     "file_size": len(raw),
                 }, False
-            except Exception as read_error:
+            except OSError as read_error:
                 return {"error": "Could not read file", "read_error": str(read_error)}, False
 
         except FileNotFoundError:
@@ -246,7 +246,7 @@ def run_evaluation(gen_directory, task_dir, venv_dir):
                 with open(results_json_path) as f:
                     results = json.load(f)
                 logger.info(f"    Results: {json.dumps(results, indent=2)}")
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 pass
 
             return {
@@ -264,7 +264,7 @@ def run_evaluation(gen_directory, task_dir, venv_dir):
                 "output": eval_output,
             }
 
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
         logger.error(f"  ✗ Unexpected error during evaluation: {e}")
         logger.error(traceback.format_exc())
         return {"status": "error", "reason": str(e), "traceback": traceback.format_exc()}
@@ -689,7 +689,7 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
         except Exception as e:
             target_agent_success = False
             target_agent_error_msg = f"Unexpected error during target agent execution: {e!s}"
-            logger.error(f"  ✗ {target_agent_error_msg}")
+            logger.exception(f"  ✗ {target_agent_error_msg}")
             logger.warning("  → Continuing with feedback agent despite target agent failure")
 
             # Try to read any partial logs
@@ -815,7 +815,7 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
 {json.dumps(eval_data, indent=2)}
 ```
 """
-                except Exception as e:
+                except (json.JSONDecodeError, OSError) as e:
                     eval_results_section = f"\n**EVALUATION RESULTS**: Error loading results.json: {e}\n"
             else:
                 eval_results_section = (
