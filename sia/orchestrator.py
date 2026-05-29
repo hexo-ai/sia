@@ -218,13 +218,15 @@ def run_evaluation(gen_directory, task_dir, venv_dir):
     # Run evaluate.py as subprocess with --gen-dir
     try:
         python_exec = os.path.join(venv_dir, "bin", "python")
-        command = f"{python_exec} {evaluate_script} --gen-dir {gen_directory} 2>&1 | tee {eval_log_file}"
-
-        result = subprocess.run(command, shell=True, text=True, executable="/bin/bash")
-
-        # Read evaluation log
-        with open(eval_log_file) as f:
-            eval_output = f.read()
+        result = subprocess.run(
+            [python_exec, evaluate_script, "--gen-dir", gen_directory],
+            capture_output=True,
+            text=True,
+            timeout=Config.EVAL_TIMEOUT,
+        )
+        # Write combined output to log file
+        eval_output = result.stdout + result.stderr
+        Path(eval_log_file).write_text(eval_output, encoding="utf-8")
 
         if result.returncode != 0:
             logger.error(f"  ✗ Evaluation failed with exit code {result.returncode}")
@@ -264,6 +266,9 @@ def run_evaluation(gen_directory, task_dir, venv_dir):
                 "output": eval_output,
             }
 
+    except subprocess.TimeoutExpired:
+        logger.error(f"  ✗ Evaluation timed out after {Config.EVAL_TIMEOUT}s")
+        return {"status": "error", "reason": f"Evaluation timed out after {Config.EVAL_TIMEOUT}s"}
     except (subprocess.SubprocessError, OSError) as e:
         logger.error(f"  ✗ Unexpected error during evaluation: {e}")
         logger.error(traceback.format_exc())
