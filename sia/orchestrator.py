@@ -291,9 +291,12 @@ def _print_welcome():
 def main():
     _print_welcome()
 
+    # Load env-var overrides (lower priority than explicit CLI flags)
+    env_config = Config.from_env()
+
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run the orchestrator for agent evolution")
-    parser.add_argument("--max_gen", type=int, default=Config.DEFAULT_MAX_GENERATIONS, help="Maximum number of generations to run (default: 3)")
+    parser.add_argument("--max_gen", type=int, default=env_config.DEFAULT_MAX_GENERATIONS, help="Maximum number of generations to run (default: 3)")
     parser.add_argument("--run_id", type=int, default=1, help="Run ID for this experiment (default: 1)")
     task_group = parser.add_mutually_exclusive_group(required=True)
     task_group.add_argument(
@@ -316,13 +319,13 @@ def main():
     parser.add_argument(
         "--task_model",
         type=str,
-        default=Config.DEFAULT_TASK_MODEL,
+        default=env_config.DEFAULT_TASK_MODEL,
         help="Model to use for target agent (default: claude-haiku-4-5-20251001)",
     )
     parser.add_argument(
         "--backend",
         type=str,
-        default=Config.DEFAULT_BACKEND,
+        default=env_config.DEFAULT_BACKEND,
         choices=["claude", "openhands"],
         help="Agent backend to use: claude (Claude Code SDK) or openhands (OpenHands SDK) (default: claude)",
     )
@@ -336,11 +339,11 @@ def main():
     # Set default meta_model based on backend if not explicitly provided
     if args.meta_model is None:
         if backend == "openhands":
-            meta_model = Config.DEFAULT_OPENHANDS_META_MODEL
-            logger.info(f"Using default OpenHands model: {Config.DEFAULT_OPENHANDS_META_MODEL}")
+            meta_model = env_config.DEFAULT_OPENHANDS_META_MODEL
+            logger.info(f"Using default OpenHands model: {env_config.DEFAULT_OPENHANDS_META_MODEL}")
         else:
-            meta_model = Config.DEFAULT_CLAUDE_META_MODEL
-            logger.info(f"Using default Claude model: {Config.DEFAULT_CLAUDE_META_MODEL}")
+            meta_model = env_config.DEFAULT_CLAUDE_META_MODEL
+            logger.info(f"Using default Claude model: {env_config.DEFAULT_CLAUDE_META_MODEL}")
     else:
         meta_model = args.meta_model
 
