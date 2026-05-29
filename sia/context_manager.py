@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from sia.config import Config
+
 
 class ContextManager:
     """Manages context.md for tracking generation evolution in a run"""
@@ -35,8 +37,8 @@ class ContextManager:
         self.context_path = os.path.join(run_directory, "context.md")
         self.config = run_config
         self.generations = []
-        self.meta_model = run_config.get("meta_model", "haiku")
-        self.backend = run_config.get("backend", "claude")
+        self.meta_model = run_config.get("meta_model", Config.DEFAULT_CLAUDE_META_MODEL)
+        self.backend = run_config.get("backend", Config.DEFAULT_BACKEND)
 
     def initialize(self):
         """Create context.md with header information"""
@@ -113,12 +115,12 @@ class ContextManager:
 
 **PREVIOUS AGENT CODE** (gen_{gen_num - 1}/target_agent.py):
 ```python
-{prev_agent_code[:3000]}{"..." if len(prev_agent_code) > 3000 else ""}
+{prev_agent_code[:Config.AGENT_CODE_PREVIEW_LIMIT]}{"..." if len(prev_agent_code) > Config.AGENT_CODE_PREVIEW_LIMIT else ""}
 ```
 
 **CURRENT AGENT CODE** (gen_{gen_num}/target_agent.py):
 ```python
-{current_agent_code[:3000]}{"..." if len(current_agent_code) > 3000 else ""}
+{current_agent_code[:Config.AGENT_CODE_PREVIEW_LIMIT]}{"..." if len(current_agent_code) > Config.AGENT_CODE_PREVIEW_LIMIT else ""}
 ```
 
 **METRICS COMPARISON**:
@@ -142,7 +144,7 @@ class ContextManager:
 
                     await run_agent(
                         model_name=self.meta_model,
-                        max_turns="5",
+                        max_turns=Config.CONTEXT_SUMMARY_MAX_TURNS,
                         prompt=file_prompt,
                         agent_working_directory=temp_dir,
                         backend=self.backend,
