@@ -512,7 +512,7 @@ class ContextManager:
                 entry += "- Key changes from improvement.md:\n"
                 for insight in insights[:3]:
                     # Truncate very long insights
-                    insight_text = insight[:200] + "..." if len(insight) > 200 else insight
+                    insight_text = insight[:Config.INSIGHT_PREVIEW_LIMIT] + "..." if len(insight) > Config.INSIGHT_PREVIEW_LIMIT else insight
                     entry += f"  * {insight_text}\n"
 
         # Add LLM-generated summary if available

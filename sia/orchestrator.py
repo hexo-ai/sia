@@ -609,8 +609,8 @@ def _build_feedback_context(
         sample_trajectories_text = ""
         for idx, traj in enumerate(trajectories[:3]):
             traj_json = json.dumps(traj, indent=2)
-            if len(traj_json) > 1000:
-                traj_json = traj_json[:1000] + "\n  ... (truncated)"
+            if len(traj_json) > Config.TRAJECTORY_PREVIEW_LIMIT:
+                traj_json = traj_json[:Config.TRAJECTORY_PREVIEW_LIMIT] + "\n  ... (truncated)"
             sample_trajectories_text += f"\n### Trajectory {idx}\n```json\n{traj_json}\n```\n"
 
         execution_section = f"""
