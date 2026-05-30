@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -184,4 +185,55 @@ def test_run_generation_directory_structure(mock_run_ta, mock_run_fb, tmp_path):
     assert (gen_dir / "target_agent.py").is_file()
 
 
-from pathlib import Path
+@patch("sia.context_manager.ContextManager._generate_llm_summary", return_value=None)
+@patch("sia.orchestrator._run_feedback_agent")
+@patch("sia.orchestrator._run_target_agent")
+def test_two_generations_with_feedback(mock_run_ta, mock_run_fb, mock_llm, tmp_path):
+    """Two-generation evolution: feedback agent called for gen_1, skipped for gen_2."""
+    task_dir, _ = _make_task_files(tmp_path)
+    run_setup = _make_run_setup(tmp_path, task_dir)
+
+    mock_run_ta.return_value = (True, "output", "", "")
+
+    # Stub _run_feedback_agent to create gen_2/target_agent.py
+    def _fake_feedback(*args, **kwargs):
+        next_gen_dir = Path(run_setup.run_directory) / "gen_2"
+        next_gen_dir.mkdir(exist_ok=True)
+        (next_gen_dir / "target_agent.py").write_text("print('improved')\n")
+        (next_gen_dir / "improvement.md").write_text("- Better prompts\n- More robust error handling\n")
+
+    mock_run_fb.side_effect = _fake_feedback
+
+    task_files = TaskFiles("d", "r", {}, "# T")
+
+    # Generation 1 (should trigger feedback agent)
+    run_generation(
+        current_gen=1, max_gen=2, run_setup=run_setup, task_files=task_files,
+        abs_dataset_dir="/data", dataset_dir="/data",
+        meta_model="haiku", backend="claude", sandbox="none", env_config=Config(),
+    )
+    mock_run_fb.assert_called_once()
+
+    # Generation 2 (should NOT trigger feedback agent -- last generation)
+    run_generation(
+        current_gen=2, max_gen=2, run_setup=run_setup, task_files=task_files,
+        abs_dataset_dir="/data", dataset_dir="/data",
+        meta_model="haiku", backend="claude", sandbox="none", env_config=Config(),
+    )
+    assert mock_run_fb.call_count == 1  # still only called once
+
+    # Verify both gen directories exist
+    run_dir = Path(run_setup.run_directory)
+    assert (run_dir / "gen_1" / "target_agent.py").is_file()
+    assert (run_dir / "gen_2" / "target_agent.py").is_file()
+
+    # Verify context.md tracks both generations
+    ctx = (run_dir / "context.md").read_text()
+    assert "Generation 1" in ctx
+    assert "Generation 2" in ctx
+
+    # Verify finalize produces summary
+    run_setup.context_mgr.finalize()
+    ctx_final = (run_dir / "context.md").read_text()
+    assert "Summary Statistics" in ctx_final
+    assert "**Total Generations**: 2" in ctx_final
