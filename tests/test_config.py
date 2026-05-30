@@ -13,6 +13,8 @@ def test_default_values():
     assert cfg.DEFAULT_MAX_TURNS == 20
     assert cfg.DOCKER_MEMORY_LIMIT == "2g"
     assert cfg.MAX_CONTEXT_FILE_SIZE == 10_000_000
+    assert cfg.HIVEMIND_ENDPOINT == "http://192.168.183.108:8400/v1"
+    assert cfg.HIVEMIND_MODEL == "glm-flash"
 
 
 def test_from_env_reads_sia_vars(monkeypatch):
@@ -51,5 +53,7 @@ def test_config_is_dataclass_with_expected_fields():
         "SANDBOX_MODE",
         "DOCKER_IMAGE",
         "MAX_CONTEXT_FILE_SIZE",
+        "HIVEMIND_ENDPOINT",
+        "HIVEMIND_MODEL",
     }
     assert expected.issubset(field_names)
