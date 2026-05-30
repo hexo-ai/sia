@@ -1,6 +1,7 @@
 """Unit tests for the ContextManager."""
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -106,7 +107,9 @@ def test_finalize_with_metrics(context_mgr, run_dir):
     assert "Summary Statistics" in content
 
 
-def test_multiple_generations_track_deltas(context_mgr, run_dir):
+@pytest.mark.usefixtures("run_dir")
+@patch("sia.context_manager.ContextManager._generate_llm_summary", return_value=None)
+def test_multiple_generations_track_deltas(mock_llm, context_mgr, run_dir):
     # Gen 1
     gen1 = run_dir / "gen_1"
     (gen1 / "results.json").write_text(json.dumps({"accuracy": 0.70}))

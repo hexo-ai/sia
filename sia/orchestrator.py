@@ -567,13 +567,13 @@ def _run_target_agent(
             logger.warning("  → Continuing with feedback agent despite target agent failure")
             return False, target_agent_stdout, target_agent_stderr, target_agent_error_msg
         else:
-            logger.info(f"  ✓ Target agent execution completed successfully")
+            logger.info("  ✓ Target agent execution completed successfully")
             return True, target_agent_stdout, target_agent_stderr, target_agent_error_msg
 
     except FileNotFoundError:
         logger.error(f"  ✗ Target agent file not found: {target_agent_path}")
-        logger.error("  → Cannot continue. Exiting.")
-        sys.exit(1)
+        logger.error("  → Cannot continue.")
+        return False, "", "", f"Target agent file not found: {target_agent_path}"
     except Exception as e:
         target_agent_error_msg = f"Unexpected error during target agent execution: {e!s}"
         logger.exception(f"  ✗ {target_agent_error_msg}")
@@ -637,10 +637,13 @@ The agent executed {trajectory_count} separate trajectories (e.g., different que
 - Ensure consistent behavior across all samples
 """
     else:
+        traj_json = json.dumps(agent_execution, indent=2)
+        if len(traj_json) > Config.TRAJECTORY_PREVIEW_LIMIT:
+            traj_json = traj_json[:Config.TRAJECTORY_PREVIEW_LIMIT] + "\n  ... (truncated)"
         execution_section = f"""
 Here is the target agent execution trajectory:
 ```json
-{json.dumps(agent_execution, indent=2)}
+{traj_json}
 ```
 
 NOTE: If you see an "error" field in the above JSON, it means the execution log was malformed or missing. Focus on making the agent more robust.
@@ -742,7 +745,7 @@ def _run_feedback_agent(
     asyncio.run(
         run_agent(
             model_name=meta_model,
-            max_turns=Config.DEFAULT_MAX_TURNS,
+            max_turns=str(Config.DEFAULT_MAX_TURNS),
             prompt=feedback_agent_prompt,
             agent_working_directory=next_gen_dir,
             backend=backend,
@@ -1052,7 +1055,7 @@ def main():
     asyncio.run(
         run_agent(
             model_name=meta_model,
-            max_turns=Config.DEFAULT_MAX_TURNS,
+            max_turns=str(Config.DEFAULT_MAX_TURNS),
             prompt=meta_agent_prompt,
             agent_working_directory=run_setup.meta_agent_working_directory,
             backend=backend,

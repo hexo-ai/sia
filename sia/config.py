@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 from dataclasses import dataclass, field
 
@@ -20,8 +21,8 @@ class Config:
     DEFAULT_RUN_ID: int = 1
 
     # Agent execution
-    DEFAULT_MAX_TURNS: str = "20"
-    CONTEXT_SUMMARY_MAX_TURNS: str = "5"
+    DEFAULT_MAX_TURNS: int = 20
+    CONTEXT_SUMMARY_MAX_TURNS: int = 5
     DEFAULT_BACKEND: str = "claude"
 
     # Truncation limits
@@ -67,14 +68,12 @@ class Config:
             "SIA_TASK_MODEL": ("DEFAULT_TASK_MODEL", str),
             "SIA_MAX_GENERATIONS": ("DEFAULT_MAX_GENERATIONS", int),
             "SIA_BACKEND": ("DEFAULT_BACKEND", str),
-            "SIA_MAX_TURNS": ("DEFAULT_MAX_TURNS", str),
+            "SIA_MAX_TURNS": ("DEFAULT_MAX_TURNS", int),
             "SIA_SANDBOX_MODE": ("SANDBOX_MODE", str),
         }
         for env_var, (attr, converter) in env_map.items():
             val = os.environ.get(env_var)
             if val is not None:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     setattr(cfg, attr, converter(val))
-                except (ValueError, TypeError):
-                    pass  # keep default
         return cfg

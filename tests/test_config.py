@@ -1,6 +1,5 @@
 """Unit tests for sia.config.Config."""
 
-import os
 from dataclasses import fields
 
 from sia.config import Config
@@ -11,7 +10,7 @@ def test_default_values():
     assert cfg.DEFAULT_MAX_GENERATIONS == 3
     assert cfg.DEFAULT_BACKEND == "claude"
     assert cfg.SANDBOX_MODE == "none"
-    assert cfg.DEFAULT_MAX_TURNS == "20"
+    assert cfg.DEFAULT_MAX_TURNS == 20
     assert cfg.DOCKER_MEMORY_LIMIT == "2g"
     assert cfg.MAX_CONTEXT_FILE_SIZE == 10_000_000
 
