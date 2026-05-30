@@ -7,6 +7,7 @@ including code changes, performance metrics, and insights across iterations.
 
 import asyncio
 import json
+import logging
 import os
 import re
 import tempfile
@@ -15,6 +16,35 @@ from pathlib import Path
 from typing import Any
 
 from sia.config import Config
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_read_file(path: str | Path, max_bytes: int = Config.MAX_CONTEXT_FILE_SIZE) -> str | None:
+    """Read a file with size limit. Returns None if file exceeds max_bytes."""
+    try:
+        file_size = os.path.getsize(path)
+        if file_size > max_bytes:
+            logger.warning(f"File too large ({file_size:,} bytes > {max_bytes:,}): {path}")
+            return None
+        return Path(path).read_text(encoding="utf-8")
+    except OSError as e:
+        logger.warning(f"Could not read file: {path}: {e}")
+        return None
+
+
+def _safe_load_json(path: str, max_bytes: int = Config.MAX_CONTEXT_FILE_SIZE) -> dict | list | None:
+    """Load JSON with size limit. Returns None if file exceeds max_bytes."""
+    try:
+        file_size = os.path.getsize(path)
+        if file_size > max_bytes:
+            logger.warning(f"JSON file too large ({file_size:,} bytes > {max_bytes:,}): {path}")
+            return None
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Could not load JSON: {path}: {e}")
+        return None
 
 
 class ContextManager:
@@ -77,22 +107,27 @@ class ContextManager:
         try:
             # Read current generation's target_agent.py
             current_agent_path = gen_data["agent_path"]
-            current_agent_code = Path(current_agent_path).read_text(encoding="utf-8")
+            current_agent_code = _safe_read_file(current_agent_path)
+            if current_agent_code is None:
+                logger.warning(f"Could not read current agent code for gen {gen_num}, skipping LLM summary")
+                return None
 
             # Read previous generation's target_agent.py
             prev_gen_dir = os.path.join(self.run_dir, f"gen_{gen_num - 1}")
             prev_agent_path = os.path.join(prev_gen_dir, "target_agent.py")
-            prev_agent_code = (
-                Path(prev_agent_path).read_text(encoding="utf-8")
-                if os.path.exists(prev_agent_path)
-                else "Not available"
-            )
+            prev_agent_code = _safe_read_file(prev_agent_path)
+            if prev_agent_code is None:
+                if not os.path.exists(prev_agent_path):
+                    prev_agent_code = "Not available"
+                else:
+                    logger.warning(f"Could not read previous agent code for gen {gen_num - 1}")
+                    prev_agent_code = "Not available (file too large or unreadable)"
 
             # Read improvement.md from current generation
             improvement_path = gen_data.get("improvement_path")
             improvement_content = ""
             if improvement_path and os.path.exists(improvement_path):
-                improvement_content = Path(improvement_path).read_text(encoding="utf-8")
+                improvement_content = _safe_read_file(improvement_path) or ""
 
             # Get previous generation's metrics
             prev_metrics = self.generations[-1]["metrics"] if self.generations else {}
@@ -152,7 +187,8 @@ class ContextManager:
 
                     # Read the summary from file
                     if os.path.exists(summary_file):
-                        return Path(summary_file).read_text(encoding="utf-8").strip()
+                        summary_text = _safe_read_file(summary_file)
+                        return summary_text.strip() if summary_text else None
                     return None
 
                 # Run async function
@@ -331,38 +367,32 @@ class ContextManager:
         # Priority 1: results.json - load ALL fields generically
         results_path = os.path.join(gen_dir, "results.json")
         if os.path.exists(results_path):
-            try:
-                with open(results_path, encoding="utf-8") as f:
-                    data = json.load(f)
-                    # Extract all top-level scalar values (skip nested dicts/lists for now)
-                    for key, value in data.items():
-                        if isinstance(value, (int, float, str, bool)):
-                            metrics[key] = value
-                        # For common nested structures, try to extract useful info
-                        elif key == "per_class" and isinstance(value, dict):
-                            # Skip per_class details, too verbose for context
-                            continue
-                        elif isinstance(value, dict):
-                            # Skip other nested dicts
-                            continue
-                        elif isinstance(value, list) and len(value) > 0:
-                            # Skip lists
-                            continue
-            except (json.JSONDecodeError, OSError) as e:
-                print(f"Warning: Could not parse results.json: {e}")
+            data = _safe_load_json(results_path)
+            if data is not None and isinstance(data, dict):
+                # Extract all top-level scalar values (skip nested dicts/lists for now)
+                for key, value in data.items():
+                    if isinstance(value, (int, float, str, bool)):
+                        metrics[key] = value
+                    # For common nested structures, try to extract useful info
+                    elif key == "per_class" and isinstance(value, dict):
+                        # Skip per_class details, too verbose for context
+                        continue
+                    elif isinstance(value, dict):
+                        # Skip other nested dicts
+                        continue
+                    elif isinstance(value, list) and len(value) > 0:
+                        # Skip lists
+                        continue
 
         # Priority 2: detailed_results.json
         detailed_results_path = os.path.join(gen_dir, "detailed_results.json")
         if os.path.exists(detailed_results_path) and not metrics:
-            try:
-                with open(detailed_results_path, encoding="utf-8") as f:
-                    data = json.load(f)
-                    # Extract all top-level scalar values
-                    for key, value in data.items():
-                        if isinstance(value, (int, float, str, bool)):
-                            metrics[key] = value
-            except (json.JSONDecodeError, OSError) as e:
-                print(f"Warning: Could not parse detailed_results.json: {e}")
+            data = _safe_load_json(detailed_results_path)
+            if data is not None and isinstance(data, dict):
+                # Extract all top-level scalar values
+                for key, value in data.items():
+                    if isinstance(value, (int, float, str, bool)):
+                        metrics[key] = value
 
         # Priority 3: Parse stdout
         stdout_path = os.path.join(gen_dir, "target_agent_stdout.log")
@@ -374,75 +404,70 @@ class ContextManager:
     def _parse_stdout_metrics(self, stdout_path: str) -> dict[str, Any]:
         """Parse metrics from stdout log using regex patterns"""
         metrics = {}
-        try:
-            with open(stdout_path, encoding="utf-8") as f:
-                content = f.read()
+        content = _safe_read_file(stdout_path)
+        if content is None:
+            return metrics
 
-                # Look for common patterns
-                patterns = {
-                    "accuracy": [
-                        r"accuracy[:\s=]+(\d+\.?\d*)\s*%?",
-                        r"final\s+accuracy[:\s=]+(\d+\.?\d*)\s*%?",
-                        r"test\s+accuracy[:\s=]+(\d+\.?\d*)\s*%?",
-                    ],
-                    "validation": [
-                        r"validation[:\s=]+(\d+\.?\d*)",
-                        r"val[:\s=]+(\d+\.?\d*)",
-                    ],
-                    "correct": [
-                        r"(\d+)\s*/\s*\d+\s+correct",
-                        r"correct[:\s=]+(\d+)",
-                    ],
-                    "total": [
-                        r"\d+\s*/\s*(\d+)\s+(?:questions|samples|total)",
-                    ],
-                }
+        # Look for common patterns
+        patterns = {
+            "accuracy": [
+                r"accuracy[:\s=]+(\d+\.?\d*)\s*%?",
+                r"final\s+accuracy[:\s=]+(\d+\.?\d*)\s*%?",
+                r"test\s+accuracy[:\s=]+(\d+\.?\d*)\s*%?",
+            ],
+            "validation": [
+                r"validation[:\s=]+(\d+\.?\d*)",
+                r"val[:\s=]+(\d+\.?\d*)",
+            ],
+            "correct": [
+                r"(\d+)\s*/\s*\d+\s+correct",
+                r"correct[:\s=]+(\d+)",
+            ],
+            "total": [
+                r"\d+\s*/\s*(\d+)\s+(?:questions|samples|total)",
+            ],
+        }
 
-                for metric_name, pattern_list in patterns.items():
-                    for pattern in pattern_list:
-                        match = re.search(pattern, content, re.IGNORECASE)
-                        if match:
-                            try:
-                                value = float(match.group(1))
-                                metrics[metric_name] = value
-                                break
-                            except (ValueError, TypeError):
-                                continue
-        except OSError as e:
-            print(f"Warning: Could not parse stdout metrics: {e}")
+        for metric_name, pattern_list in patterns.items():
+            for pattern in pattern_list:
+                match = re.search(pattern, content, re.IGNORECASE)
+                if match:
+                    try:
+                        value = float(match.group(1))
+                        metrics[metric_name] = value
+                        break
+                    except (ValueError, TypeError):
+                        continue
 
         return metrics
 
     def _extract_insights(self, improvement_path: str) -> list[str]:
         """Extract key points from improvement.md"""
         insights = []
-        try:
-            with open(improvement_path, encoding="utf-8") as f:
-                content = f.read()
+        content = _safe_read_file(improvement_path)
+        if content is None:
+            return insights
 
-                # Look for bullet points or numbered items in improvement.md
-                # Pattern 1: Lines starting with - or *
-                bullet_pattern = r"^[-*]\s+(.+)$"
-                bullets = re.findall(bullet_pattern, content, re.MULTILINE)
+        # Look for bullet points or numbered items in improvement.md
+        # Pattern 1: Lines starting with - or *
+        bullet_pattern = r"^[-*]\s+(.+)$"
+        bullets = re.findall(bullet_pattern, content, re.MULTILINE)
 
-                # Pattern 2: Numbered items
-                numbered_pattern = r"^\d+\.\s+(.+)$"
-                numbered = re.findall(numbered_pattern, content, re.MULTILINE)
+        # Pattern 2: Numbered items
+        numbered_pattern = r"^\d+\.\s+(.+)$"
+        numbered = re.findall(numbered_pattern, content, re.MULTILINE)
 
-                # Combine and take first 5 meaningful insights
-                all_insights = bullets + numbered
+        # Combine and take first 5 meaningful insights
+        all_insights = bullets + numbered
 
-                # Filter out very short or header-like items
-                meaningful_insights = [
-                    insight.strip()
-                    for insight in all_insights
-                    if len(insight.strip()) > 20 and not insight.strip().endswith(":")
-                ]
+        # Filter out very short or header-like items
+        meaningful_insights = [
+            insight.strip()
+            for insight in all_insights
+            if len(insight.strip()) > 20 and not insight.strip().endswith(":")
+        ]
 
-                insights = meaningful_insights[:5]
-        except OSError as e:
-            print(f"Warning: Could not extract insights: {e}")
-
+        insights = meaningful_insights[:5]
         return insights
 
     def _format_generation_entry(
