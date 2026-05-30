@@ -54,6 +54,7 @@ import sys
 import time
 import traceback
 import venv
+from dataclasses import dataclass
 from datetime import datetime
 from importlib.resources import files as resource_files
 from pathlib import Path
@@ -332,6 +333,40 @@ def _run_target_agent_sandboxed(
         return process.wait()
 
 
+@dataclass
+class TaskFiles:
+    """Container for task reference files loaded from disk."""
+    sample_task_descriptions: str
+    reference_target_agent_py: str
+    sample_agent_execution: dict
+    task_md: str
+
+
+def load_task_files(task_dir: str, shared_dir: str) -> TaskFiles:
+    """Load all reference files from the task directory."""
+    logger.info("Loading files from task directory...")
+
+    sample_task_descriptions = Path(task_dir, "reference/SAMPLE_TASK_DESCRIPTIONS.md").read_text()
+    logger.info("  ✓ Sample task descriptions loaded")
+
+    reference_target_agent_py = Path(task_dir, "reference/reference_target_agent.py").read_text()
+    logger.info("  ✓ Reference target agent loaded")
+
+    with open(os.path.join(shared_dir, "sample_agent_execution.json")) as f:
+        sample_agent_execution = json.load(f)
+    logger.info("  ✓ Sample agent execution loaded")
+
+    task_md = Path(task_dir, "data/public/task.md").read_text()
+    logger.info("  ✓ Task specification loaded")
+
+    return TaskFiles(
+        sample_task_descriptions=sample_task_descriptions,
+        reference_target_agent_py=reference_target_agent_py,
+        sample_agent_execution=sample_agent_execution,
+        task_md=task_md,
+    )
+
+
 def main():
     _print_welcome()
 
@@ -412,20 +447,7 @@ def main():
     # SECTION 1: Load Files from Task Directory
     # ========================
 
-    logger.info("Loading files from task directory...")
-
-    SAMPLE_TASK_DESCRIPTIONS = Path(task_dir, "reference/SAMPLE_TASK_DESCRIPTIONS.md").read_text()
-    logger.info("  ✓ Sample task descriptions loaded")
-
-    REFERENCE_TARGET_AGENT_PY = Path(task_dir, "reference/reference_target_agent.py").read_text()
-    logger.info("  ✓ Reference target agent loaded")
-
-    with open(os.path.join(shared_dir, "sample_agent_execution.json")) as f:
-        SAMPLE_AGENT_EXECUTION = json.load(f)
-    logger.info("  ✓ Sample agent execution loaded")
-
-    TASK_MD = Path(task_dir, "data/public/task.md").read_text()
-    logger.info("  ✓ Task specification loaded")
+    task_files = load_task_files(task_dir, shared_dir)
 
     # ========================
     # SECTION 2: Setup Run Directories
@@ -483,16 +505,16 @@ def main():
     META_AGENT_PROMPT = f"""You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
 
 Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve:
-{TASK_MD}
+{task_files.task_md}
 
 Here are a couple of sample task descriptions which the target agent has to solve:
-{SAMPLE_TASK_DESCRIPTIONS}
+{task_files.sample_task_descriptions}
 
 Here is a sample target_agent.py showing the complete implementation pattern (READ THE ENTIRE FILE):
-{REFERENCE_TARGET_AGENT_PY}
+{task_files.reference_target_agent_py}
 
 Here is a sample agent execution trajectory:
-{json.dumps(SAMPLE_AGENT_EXECUTION, indent=2)}
+{json.dumps(task_files.sample_agent_execution, indent=2)}
 
 CRITICAL RULES - FOLLOW EXACTLY:
 
@@ -931,7 +953,7 @@ STDERR:
                 CURRENT_GEN=current_gen,
                 PREVIOUS_GENS=previous_gens_text,
                 CONTEXT_MD_PATH=os.path.join(RUN_DIRECTORY, "context.md"),
-                SAMPLE_TASK_DESCRIPTIONS=SAMPLE_TASK_DESCRIPTIONS,
+                SAMPLE_TASK_DESCRIPTIONS=task_files.sample_task_descriptions,
                 AGENT_PY=AGENT_PY,
                 TASK=TASK,
                 EXECUTION_STATUS=execution_status,
