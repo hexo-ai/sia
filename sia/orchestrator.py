@@ -367,6 +367,74 @@ def load_task_files(task_dir: str, shared_dir: str) -> TaskFiles:
     )
 
 
+@dataclass
+class RunSetup:
+    """Container for run directory paths and managers."""
+    run_directory: str
+    meta_agent_working_directory: str
+    venv_dir: str
+    context_mgr: ContextManager
+
+
+def _create_venv(venv_dir: str, packages: list[str]) -> None:
+    """Create a virtual environment and install packages."""
+    if shutil.which("uv"):
+        subprocess.run(["uv", "venv", venv_dir], check=True)
+        subprocess.run(
+            ["uv", "pip", "install", "--python", os.path.join(venv_dir, "bin", "python"), *packages],
+            check=True,
+        )
+    else:
+        venv.create(venv_dir, with_pip=True)
+        subprocess.run([os.path.join(venv_dir, "bin", "pip"), "install", *packages], check=True)
+
+
+def setup_run_directory(
+    run_id: int, task_dir: str, meta_model: str, task_model: str,
+    backend: str, max_gen: int,
+) -> RunSetup:
+    """Create run directories, venv, and context manager."""
+    gen_num = 1
+    run_directory = f"./runs/run_{run_id}"
+    meta_agent_working_directory = os.path.abspath(f"{run_directory}/gen_{gen_num}")
+
+    if os.path.exists(run_directory):
+        logger.error(f"Run directory already exists: {run_directory}")
+        logger.error("Please use a different run_id or remove the existing directory")
+        sys.exit(1)
+
+    logger.info(f"Creating run directory: {run_directory}")
+    os.makedirs(run_directory, exist_ok=False)
+
+    logger.info(f"Creating meta_agent working directory: {meta_agent_working_directory}")
+    os.makedirs(meta_agent_working_directory, exist_ok=False)
+
+    venv_dir = os.path.join(run_directory, "venv")
+    logger.info(f"Creating virtual environment at: {venv_dir}")
+    _create_venv(venv_dir, Config.VENV_PACKAGES)
+
+    logger.info("Initializing context manager...")
+    context_mgr = ContextManager(
+        run_directory,
+        {
+            "task_dir": task_dir,
+            "meta_model": meta_model,
+            "task_model": task_model,
+            "backend": backend,
+            "max_gen": max_gen,
+        },
+    )
+    context_mgr.initialize()
+    logger.info("  ✓ Context manager initialized")
+
+    return RunSetup(
+        run_directory=run_directory,
+        meta_agent_working_directory=meta_agent_working_directory,
+        venv_dir=venv_dir,
+        context_mgr=context_mgr,
+    )
+
+
 def main():
     _print_welcome()
 
@@ -453,50 +521,7 @@ def main():
     # SECTION 2: Setup Run Directories
     # ========================
 
-    gen_num = 1
-    RUN_DIRECTORY = f"./runs/run_{run_id}"
-    META_AGENT_WORKING_DIRECTORY = os.path.abspath(f"{RUN_DIRECTORY}/gen_{gen_num}")
-    # Create run directory and meta_agent working directory
-    if os.path.exists(RUN_DIRECTORY):
-        logger.error(f"Run directory already exists: {RUN_DIRECTORY}")
-        logger.error("Please use a different run_id or remove the existing directory")
-        sys.exit(1)
-
-    logger.info(f"Creating run directory: {RUN_DIRECTORY}")
-    os.makedirs(RUN_DIRECTORY, exist_ok=False)
-
-    logger.info(f"Creating meta_agent working directory: {META_AGENT_WORKING_DIRECTORY}")
-    os.makedirs(META_AGENT_WORKING_DIRECTORY, exist_ok=False)
-
-    # Create virtual environment
-    venv_dir = os.path.join(RUN_DIRECTORY, "venv")
-    logger.info(f"Creating virtual environment at: {venv_dir}")
-
-    packages = Config.VENV_PACKAGES
-
-    if shutil.which("uv"):
-        subprocess.run(["uv", "venv", venv_dir], check=True)
-        subprocess.run(
-            ["uv", "pip", "install", "--python", os.path.join(venv_dir, "bin", "python"), *packages], check=True
-        )
-    else:
-        venv.create(venv_dir, with_pip=True)
-        subprocess.run([os.path.join(venv_dir, "bin", "pip"), "install", *packages], check=True)
-
-    # Initialize Context Manager
-    logger.info("Initializing context manager...")
-    context_mgr = ContextManager(
-        RUN_DIRECTORY,
-        {
-            "task_dir": task_dir,
-            "meta_model": meta_model,
-            "task_model": task_model,
-            "backend": backend,
-            "max_gen": max_gen,
-        },
-    )
-    context_mgr.initialize()
-    logger.info("  ✓ Context manager initialized")
+    run_setup = setup_run_directory(run_id, task_dir, meta_model, task_model, backend, max_gen)
 
     # ========================
     # SECTION 3: Define Prompts
@@ -518,7 +543,7 @@ Here is a sample agent execution trajectory:
 
 CRITICAL RULES - FOLLOW EXACTLY:
 
-1. The current working directory is {META_AGENT_WORKING_DIRECTORY}. Create the target_agent.py in the current working directory itself.
+1. The current working directory is {run_setup.meta_agent_working_directory}. Create the target_agent.py in the current working directory itself.
 
 2. The target_agent.py MUST accept two command-line arguments:
    - --dataset_dir: Absolute path to the dataset directory (READ-ONLY, provided at runtime)
@@ -663,7 +688,7 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
     # ========================
 
     # Save the meta-agent prompt for debugging/transparency
-    meta_agent_prompt_path = os.path.join(META_AGENT_WORKING_DIRECTORY, "meta_agent_prompt.txt")
+    meta_agent_prompt_path = os.path.join(run_setup.meta_agent_working_directory, "meta_agent_prompt.txt")
     with open(meta_agent_prompt_path, "w", encoding="utf-8") as f:
         f.write(META_AGENT_PROMPT)
     logger.info(f"  ✓ Saved meta-agent prompt to: {meta_agent_prompt_path}")
@@ -673,7 +698,7 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
             model_name=meta_model,
             max_turns=Config.DEFAULT_MAX_TURNS,
             prompt=META_AGENT_PROMPT,
-            agent_working_directory=META_AGENT_WORKING_DIRECTORY,
+            agent_working_directory=run_setup.meta_agent_working_directory,
             backend=backend,
         )
     )
@@ -681,6 +706,11 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
     # ========================
     # SECTION 5: Main Loop - Run Target Agent and Feedback Agent
     # ========================
+
+    # Shortcuts for commonly-used run_setup fields
+    RUN_DIRECTORY = run_setup.run_directory
+    venv_dir = run_setup.venv_dir
+    context_mgr = run_setup.context_mgr
 
     # Define the dataset directory and working directory to pass as arguments
     DATASET_DIRECTORY = os.path.join(task_dir, "data/public")
