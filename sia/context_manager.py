@@ -86,7 +86,7 @@ class ContextManager:
 """
         with open(self.context_path, "w", encoding="utf-8") as f:
             f.write(header)
-        print(f"Initialized context.md at {self.context_path}")
+        logger.info(f"Initialized context.md at {self.context_path}")
 
     def _generate_llm_summary(self, gen_num: int, gen_data: dict[str, Any], metrics: dict[str, Any]) -> str | None:
         """
@@ -179,7 +179,7 @@ class ContextManager:
 
                     await run_agent(
                         model_name=self.meta_model,
-                        max_turns=Config.CONTEXT_SUMMARY_MAX_TURNS,
+                        max_turns=str(Config.CONTEXT_SUMMARY_MAX_TURNS),
                         prompt=file_prompt,
                         agent_working_directory=temp_dir,
                         backend=self.backend,
@@ -195,14 +195,14 @@ class ContextManager:
                 summary = asyncio.run(get_summary())
 
                 if summary:
-                    print(f"Generated LLM summary for Generation {gen_num}")
+                    logger.info(f"Generated LLM summary for Generation {gen_num}")
                     return summary
                 else:
-                    print(f"Warning: Could not generate LLM summary for Generation {gen_num}")
+                    logger.warning(f"Could not generate LLM summary for Generation {gen_num}")
                     return None
 
         except (OSError, RuntimeError) as e:
-            print(f"Warning: Error generating LLM summary: {e}")
+            logger.warning(f"Error generating LLM summary: {e}")
             return None
 
     def _format_metrics_comparison(self, prev_metrics: dict[str, Any], current_metrics: dict[str, Any]) -> str:
@@ -287,7 +287,7 @@ class ContextManager:
             }
         )
 
-        print(f"Added Generation {gen_num} to context.md")
+        logger.info(f"Added Generation {gen_num} to context.md")
 
     def finalize(self):
         """Add summary statistics at the end of context.md"""
@@ -347,7 +347,7 @@ class ContextManager:
         with open(self.context_path, "a", encoding="utf-8") as f:
             f.write(summary)
 
-        print("Finalized context.md with summary statistics")
+        logger.info("Finalized context.md with summary statistics")
 
     def _get_agent_stats(self, agent_path: str) -> dict[str, int]:
         """Get file statistics for target_agent.py"""
@@ -357,7 +357,7 @@ class ContextManager:
             size = os.path.getsize(agent_path)
             return {"size": size, "lines": lines}
         except OSError as e:
-            print(f"Warning: Could not get agent stats: {e}")
+            logger.warning(f"Could not get agent stats: {e}")
             return {"size": 0, "lines": 0}
 
     def _extract_metrics(self, gen_dir: str) -> dict[str, Any]:
