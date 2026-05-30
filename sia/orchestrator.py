@@ -138,6 +138,11 @@ def load_agent_execution(gen_directory):
         trajectories = []
         for f in files:
             try:
+                file_size = os.path.getsize(f)
+                if file_size > Config.MAX_EXECUTION_LOG_SIZE:
+                    logger.warning(f"Skipping oversized trajectory ({file_size:,} bytes): {os.path.basename(f)}")
+                    trajectories.append({"error": "File too large", "file": os.path.basename(f), "size": file_size})
+                    continue
                 with open(f, encoding="utf-8") as fp:
                     trajectories.append(json.load(fp))
             except json.JSONDecodeError as e:
@@ -156,6 +161,10 @@ def load_agent_execution(gen_directory):
         logger.info("  → Detected single-file format")
 
         try:
+            file_size = os.path.getsize(execution_file)
+            if file_size > Config.MAX_EXECUTION_LOG_SIZE:
+                logger.warning(f"Execution log too large ({file_size:,} bytes), skipping")
+                return {"error": "File too large", "size": file_size}, False
             with open(execution_file, encoding="utf-8") as f:
                 data = json.load(f)
             logger.info("  ✓ Successfully loaded agent execution log")
@@ -642,9 +651,13 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
     results_json_path = os.path.join(gen_dir, "results.json")
     if os.path.exists(results_json_path):
         try:
-            with open(results_json_path, encoding="utf-8") as f:
-                eval_data = json.load(f)
-            eval_results_section = f"""
+            file_size = os.path.getsize(results_json_path)
+            if file_size > Config.MAX_EXECUTION_LOG_SIZE:
+                eval_results_section = f"\n**EVALUATION RESULTS**: results.json too large ({file_size:,} bytes)\n"
+            else:
+                with open(results_json_path, encoding="utf-8") as f:
+                    eval_data = json.load(f)
+                eval_results_section = f"""
 
 **EVALUATION RESULTS**:
 ```json
