@@ -48,4 +48,4 @@ Files in `sia/tasks/_shared/` and `sia/tasks/*/reference/` are **template code**
 
 ## Reporting
 
-Report security vulnerabilities to security@hexo-ai.com.
+Report security vulnerabilities to security@hexo.ai.

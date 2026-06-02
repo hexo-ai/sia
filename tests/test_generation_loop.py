@@ -1,17 +1,14 @@
 """Integration tests for generation loop with mocked agents."""
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from sia.config import Config
 from sia.context_manager import ContextManager
 from sia.orchestrator import (
-    TaskFiles,
     RunSetup,
+    TaskFiles,
     _run_target_agent,
     run_generation,
 )
@@ -75,7 +72,7 @@ def test_run_target_agent_success(mock_popen_cls, tmp_path):
     mock_process.wait.return_value = 0
     mock_popen_cls.return_value = mock_process
 
-    success, stdout, stderr, err = _run_target_agent(
+    success, _stdout, _stderr, err = _run_target_agent(
         venv_dir="/fake/venv",
         target_agent_path=str(gen_dir / "target_agent.py"),
         abs_dataset_dir="/data",
@@ -106,7 +103,7 @@ def test_run_target_agent_failure(mock_popen_cls, tmp_path):
     mock_process.wait.return_value = 1
     mock_popen_cls.return_value = mock_process
 
-    success, stdout, stderr, err = _run_target_agent(
+    success, _stdout, _stderr, err = _run_target_agent(
         venv_dir="/fake/venv",
         target_agent_path=str(gen_dir / "target_agent.py"),
         abs_dataset_dir="/data",
@@ -124,7 +121,7 @@ def test_run_target_agent_failure(mock_popen_cls, tmp_path):
 @patch("sia.orchestrator._run_target_agent")
 def test_single_generation_creates_context(mock_run_ta, mock_run_fb, tmp_path):
     """run_generation with max_gen=1 creates context.md entry."""
-    task_dir, shared_dir = _make_task_files(tmp_path)
+    task_dir, _shared_dir = _make_task_files(tmp_path)
     run_setup = _make_run_setup(tmp_path, task_dir)
 
     mock_run_ta.return_value = (True, "output", "", "")

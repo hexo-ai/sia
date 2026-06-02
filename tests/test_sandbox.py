@@ -1,6 +1,6 @@
 """Tests for Docker sandbox execution in orchestrator."""
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from sia.config import Config
 from sia.orchestrator import _run_target_agent, _run_target_agent_sandboxed
