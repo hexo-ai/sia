@@ -996,18 +996,7 @@ def main():
         choices=["none", "docker"],
         help="Sandbox mode for target agent execution: none (default) or docker (requires Docker)",
     )
-    parser.add_argument(
-        "--hivemind",
-        action="store_true",
-        default=False,
-        help="Route target agent through HiveMind gateway (local LLM). Overrides --task_model.",
-    )
     args = parser.parse_args()
-
-    # HiveMind shortcut: override task model to use local LLM proxy
-    if args.hivemind:
-        args.task_model = env_config.HIVEMIND_TASK_MODEL
-        logger.info(f"HiveMind mode: target agent using {env_config.HIVEMIND_TASK_MODEL} via {env_config.HIVEMIND_ENDPOINT}")
 
     max_gen = args.max_gen
     task_dir, shared_dir = resolve_task_dir(args.task, args.task_dir)

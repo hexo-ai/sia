@@ -42,11 +42,6 @@ class Config:
     DOCKER_CPU_LIMIT: float = 2.0
     DOCKER_TIMEOUT: int = 3600  # seconds
 
-    # HiveMind gateway (OpenAI-compatible local LLM proxy)
-    HIVEMIND_ENDPOINT: str = "http://192.168.183.108:8400/v1"
-    HIVEMIND_MODEL: str = "glm-flash"
-    HIVEMIND_TASK_MODEL: str = "qwen3.6-27b"
-
     # File size limits (bytes)
     MAX_CONTEXT_FILE_SIZE: int = 10_000_000  # 10 MB
     MAX_EXECUTION_LOG_SIZE: int = 50_000_000  # 50 MB
@@ -75,8 +70,6 @@ class Config:
             "SIA_BACKEND": ("DEFAULT_BACKEND", str),
             "SIA_MAX_TURNS": ("DEFAULT_MAX_TURNS", int),
             "SIA_SANDBOX_MODE": ("SANDBOX_MODE", str),
-            "SIA_HIVEMIND_ENDPOINT": ("HIVEMIND_ENDPOINT", str),
-            "SIA_HIVEMIND_MODEL": ("HIVEMIND_MODEL", str),
         }
         for env_var, (attr, converter) in env_map.items():
             val = os.environ.get(env_var)
