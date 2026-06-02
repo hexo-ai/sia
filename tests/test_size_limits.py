@@ -2,7 +2,6 @@
 
 import json
 
-from sia.config import Config
 from sia.context_manager import _safe_load_json, _safe_read_file
 
 
