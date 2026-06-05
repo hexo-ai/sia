@@ -116,6 +116,7 @@ def test_sandbox_none_uses_standard_popen(mock_popen):
     mock_popen.return_value = mock_process
 
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
         log_path = f.name
 

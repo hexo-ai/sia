@@ -47,17 +47,19 @@ class Config:
     MAX_EXECUTION_LOG_SIZE: int = 50_000_000  # 50 MB
 
     # Virtual environment packages
-    VENV_PACKAGES: list[str] = field(default_factory=lambda: [
-        "anthropic",
-        "openai",
-        "python-dotenv",
-        "google-genai",
-        "tqdm",
-        "pydantic",
-        "scikit-learn",
-        "pandas",
-        "numpy",
-    ])
+    VENV_PACKAGES: list[str] = field(
+        default_factory=lambda: [
+            "anthropic",
+            "openai",
+            "python-dotenv",
+            "google-genai",
+            "tqdm",
+            "pydantic",
+            "scikit-learn",
+            "pandas",
+            "numpy",
+        ]
+    )
 
     @classmethod
     def from_env(cls) -> Config:

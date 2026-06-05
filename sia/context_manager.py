@@ -150,12 +150,12 @@ class ContextManager:
 
 **PREVIOUS AGENT CODE** (gen_{gen_num - 1}/target_agent.py):
 ```python
-{prev_agent_code[:Config.AGENT_CODE_PREVIEW_LIMIT]}{"..." if len(prev_agent_code) > Config.AGENT_CODE_PREVIEW_LIMIT else ""}
+{prev_agent_code[: Config.AGENT_CODE_PREVIEW_LIMIT]}{"..." if len(prev_agent_code) > Config.AGENT_CODE_PREVIEW_LIMIT else ""}
 ```
 
 **CURRENT AGENT CODE** (gen_{gen_num}/target_agent.py):
 ```python
-{current_agent_code[:Config.AGENT_CODE_PREVIEW_LIMIT]}{"..." if len(current_agent_code) > Config.AGENT_CODE_PREVIEW_LIMIT else ""}
+{current_agent_code[: Config.AGENT_CODE_PREVIEW_LIMIT]}{"..." if len(current_agent_code) > Config.AGENT_CODE_PREVIEW_LIMIT else ""}
 ```
 
 **METRICS COMPARISON**:
@@ -512,7 +512,11 @@ class ContextManager:
                 entry += "- Key changes from improvement.md:\n"
                 for insight in insights[:3]:
                     # Truncate very long insights
-                    insight_text = insight[:Config.INSIGHT_PREVIEW_LIMIT] + "..." if len(insight) > Config.INSIGHT_PREVIEW_LIMIT else insight
+                    insight_text = (
+                        insight[: Config.INSIGHT_PREVIEW_LIMIT] + "..."
+                        if len(insight) > Config.INSIGHT_PREVIEW_LIMIT
+                        else insight
+                    )
                     entry += f"  * {insight_text}\n"
 
         # Add LLM-generated summary if available

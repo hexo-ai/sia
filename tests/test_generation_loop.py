@@ -205,17 +205,31 @@ def test_two_generations_with_feedback(mock_run_ta, mock_run_fb, mock_llm, tmp_p
 
     # Generation 1 (should trigger feedback agent)
     run_generation(
-        current_gen=1, max_gen=2, run_setup=run_setup, task_files=task_files,
-        abs_dataset_dir="/data", dataset_dir="/data",
-        meta_model="haiku", backend="claude", sandbox="none", env_config=Config(),
+        current_gen=1,
+        max_gen=2,
+        run_setup=run_setup,
+        task_files=task_files,
+        abs_dataset_dir="/data",
+        dataset_dir="/data",
+        meta_model="haiku",
+        backend="claude",
+        sandbox="none",
+        env_config=Config(),
     )
     mock_run_fb.assert_called_once()
 
     # Generation 2 (should NOT trigger feedback agent -- last generation)
     run_generation(
-        current_gen=2, max_gen=2, run_setup=run_setup, task_files=task_files,
-        abs_dataset_dir="/data", dataset_dir="/data",
-        meta_model="haiku", backend="claude", sandbox="none", env_config=Config(),
+        current_gen=2,
+        max_gen=2,
+        run_setup=run_setup,
+        task_files=task_files,
+        abs_dataset_dir="/data",
+        dataset_dir="/data",
+        meta_model="haiku",
+        backend="claude",
+        sandbox="none",
+        env_config=Config(),
     )
     assert mock_run_fb.call_count == 1  # still only called once
 

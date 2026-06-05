@@ -62,7 +62,7 @@ from pathlib import Path
 from sia import __version__
 from sia.config import Config
 from sia.context_manager import ContextManager
-from sia.util import run_agent
+from sia.util import AgentBackend, run_agent
 
 # Tasks that ship inside the wheel via package-data (sia/tasks/<name>/...).
 BUNDLED_TASKS = ("gpqa", "lawbench", "longcot-chess", "spaceship-titanic")
@@ -317,16 +317,26 @@ def _run_target_agent_sandboxed(
     Network access is disabled.
     """
     docker_cmd = [
-        "docker", "run", "--rm",
-        "--network", "none",
-        "--memory", config.DOCKER_MEMORY_LIMIT,
+        "docker",
+        "run",
+        "--rm",
+        "--network",
+        "none",
+        "--memory",
+        config.DOCKER_MEMORY_LIMIT,
         f"--cpus={config.DOCKER_CPU_LIMIT}",
-        "-v", f"{dataset_dir}:/data:ro",
-        "-v", f"{working_dir}:/work:rw",
+        "-v",
+        f"{dataset_dir}:/data:ro",
+        "-v",
+        f"{working_dir}:/work:rw",
         config.DOCKER_IMAGE,
-        "python", "-u", "/work/target_agent.py",
-        "--dataset_dir", "/data",
-        "--working_dir", "/work",
+        "python",
+        "-u",
+        "/work/target_agent.py",
+        "--dataset_dir",
+        "/data",
+        "--working_dir",
+        "/work",
     ]
 
     with open(stdout_log_file, "w", encoding="utf-8") as log_fh:
@@ -345,6 +355,7 @@ def _run_target_agent_sandboxed(
 @dataclass
 class TaskFiles:
     """Container for task reference files loaded from disk."""
+
     sample_task_descriptions: str
     reference_target_agent_py: str
     sample_agent_execution: dict
@@ -379,6 +390,7 @@ def load_task_files(task_dir: str, shared_dir: str) -> TaskFiles:
 @dataclass
 class RunSetup:
     """Container for run directory paths and managers."""
+
     run_directory: str
     meta_agent_working_directory: str
     venv_dir: str
@@ -399,8 +411,12 @@ def _create_venv(venv_dir: str, packages: list[str]) -> None:
 
 
 def setup_run_directory(
-    run_id: int, task_dir: str, meta_model: str, task_model: str,
-    backend: str, max_gen: int,
+    run_id: int,
+    task_dir: str,
+    meta_model: str,
+    task_model: str,
+    backend: AgentBackend,
+    max_gen: int,
 ) -> RunSetup:
     """Create run directories, venv, and context manager."""
     gen_num = 1
@@ -445,7 +461,9 @@ def setup_run_directory(
 
 
 def build_meta_prompt(
-    task_files: TaskFiles, task_model: str, working_dir: str,
+    task_files: TaskFiles,
+    task_model: str,
+    working_dir: str,
 ) -> str:
     """Build the meta-agent prompt for creating the initial target agent."""
     return f"""You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
@@ -517,9 +535,13 @@ Example invocation (paths will vary at runtime):
 
 
 def _run_target_agent(
-    venv_dir: str, target_agent_path: str,
-    abs_dataset_dir: str, gen_dir: str,
-    stdout_log_file: str, sandbox: str, env_config: Config,
+    venv_dir: str,
+    target_agent_path: str,
+    abs_dataset_dir: str,
+    gen_dir: str,
+    stdout_log_file: str,
+    sandbox: str,
+    env_config: Config,
 ) -> tuple[bool, str, str, str]:
     """Run the target agent subprocess.
 
@@ -544,9 +566,7 @@ def _run_target_agent(
         else:
             with open(stdout_log_file, "w", encoding="utf-8") as log_fh:
                 process = subprocess.Popen(
-                    [python_exec, "-u", target_agent_path,
-                     "--dataset_dir", abs_dataset_dir,
-                     "--working_dir", gen_dir],
+                    [python_exec, "-u", target_agent_path, "--dataset_dir", abs_dataset_dir, "--working_dir", gen_dir],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -587,10 +607,15 @@ def _run_target_agent(
 
 
 def _build_feedback_context(
-    current_gen: int, gen_dir: str, dataset_dir: str,
-    target_agent_success: bool, target_agent_error_msg: str,
-    target_agent_stdout: str, target_agent_stderr: str,
-    stdout_log_file: str, task_files: TaskFiles,
+    current_gen: int,
+    gen_dir: str,
+    dataset_dir: str,
+    target_agent_success: bool,
+    target_agent_error_msg: str,
+    target_agent_stdout: str,
+    target_agent_stderr: str,
+    stdout_log_file: str,
+    task_files: TaskFiles,
 ) -> tuple[str, str]:
     """Build execution status and section for feedback prompt.
 
@@ -610,7 +635,7 @@ def _build_feedback_context(
         for idx, traj in enumerate(trajectories[:3]):
             traj_json = json.dumps(traj, indent=2)
             if len(traj_json) > Config.TRAJECTORY_PREVIEW_LIMIT:
-                traj_json = traj_json[:Config.TRAJECTORY_PREVIEW_LIMIT] + "\n  ... (truncated)"
+                traj_json = traj_json[: Config.TRAJECTORY_PREVIEW_LIMIT] + "\n  ... (truncated)"
             sample_trajectories_text += f"\n### Trajectory {idx}\n```json\n{traj_json}\n```\n"
 
         execution_section = f"""
@@ -639,7 +664,7 @@ The agent executed {trajectory_count} separate trajectories (e.g., different que
     else:
         traj_json = json.dumps(agent_execution, indent=2)
         if len(traj_json) > Config.TRAJECTORY_PREVIEW_LIMIT:
-            traj_json = traj_json[:Config.TRAJECTORY_PREVIEW_LIMIT] + "\n  ... (truncated)"
+            traj_json = traj_json[: Config.TRAJECTORY_PREVIEW_LIMIT] + "\n  ... (truncated)"
         execution_section = f"""
 Here is the target agent execution trajectory:
 ```json
@@ -708,11 +733,18 @@ STDERR:
 
 
 def _run_feedback_agent(
-    current_gen: int, max_gen: int, run_dir: str,
-    next_gen_dir: str, task_files: TaskFiles,
-    execution_status: str, execution_section: str,
-    meta_model: str, backend: str, env_config: Config,
-    dataset_dir: str, stdout_log_file: str,
+    current_gen: int,
+    max_gen: int,
+    run_dir: str,
+    next_gen_dir: str,
+    task_files: TaskFiles,
+    execution_status: str,
+    execution_section: str,
+    meta_model: str,
+    backend: AgentBackend,
+    env_config: Config,
+    dataset_dir: str,
+    stdout_log_file: str,
 ) -> None:
     """Run the feedback agent to create an improved target agent."""
     agent_py = Path(os.path.join(run_dir, f"gen_{current_gen}"), "target_agent.py").read_text(encoding="utf-8")
@@ -757,10 +789,15 @@ def _run_feedback_agent(
 
 
 def run_generation(
-    current_gen: int, max_gen: int,
-    run_setup: RunSetup, task_files: TaskFiles,
-    abs_dataset_dir: str, dataset_dir: str,
-    meta_model: str, backend: str, sandbox: str,
+    current_gen: int,
+    max_gen: int,
+    run_setup: RunSetup,
+    task_files: TaskFiles,
+    abs_dataset_dir: str,
+    dataset_dir: str,
+    meta_model: str,
+    backend: AgentBackend,
+    sandbox: str,
     env_config: Config,
 ) -> None:
     """Execute one generation: run target agent, evaluate, optionally run feedback agent."""
@@ -850,10 +887,17 @@ def run_generation(
 
 
 def build_feedback_prompt(
-    current_gen: int, max_gen: int, task_files: TaskFiles,
-    agent_py: str, task: str, execution_status: str,
-    execution_section: str, run_dir: str, next_gen_dir: str,
-    previous_gens: str, stdout_log_file: str,
+    current_gen: int,
+    max_gen: int,
+    task_files: TaskFiles,
+    agent_py: str,
+    task: str,
+    execution_status: str,
+    execution_section: str,
+    run_dir: str,
+    next_gen_dir: str,
+    previous_gens: str,
+    stdout_log_file: str,
 ) -> str:
     """Build the feedback agent prompt for improving the target agent."""
     context_md_path = os.path.join(run_dir, "context.md")
@@ -956,7 +1000,12 @@ def main():
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Run the orchestrator for agent evolution")
-    parser.add_argument("--max_gen", type=int, default=env_config.DEFAULT_MAX_GENERATIONS, help="Maximum number of generations to run (default: 3)")
+    parser.add_argument(
+        "--max_gen",
+        type=int,
+        default=env_config.DEFAULT_MAX_GENERATIONS,
+        help="Maximum number of generations to run (default: 3)",
+    )
     parser.add_argument("--run_id", type=int, default=1, help="Run ID for this experiment (default: 1)")
     task_group = parser.add_mutually_exclusive_group(required=True)
     task_group.add_argument(
