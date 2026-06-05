@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import contextlib
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import ClassVar
 
 
 @dataclass
@@ -46,20 +47,18 @@ class Config:
     MAX_CONTEXT_FILE_SIZE: int = 10_000_000  # 10 MB
     MAX_EXECUTION_LOG_SIZE: int = 50_000_000  # 50 MB
 
-    # Virtual environment packages
-    VENV_PACKAGES: list[str] = field(
-        default_factory=lambda: [
-            "anthropic",
-            "openai",
-            "python-dotenv",
-            "google-genai",
-            "tqdm",
-            "pydantic",
-            "scikit-learn",
-            "pandas",
-            "numpy",
-        ]
-    )
+    # Virtual environment packages.
+    VENV_PACKAGES: ClassVar[list[str]] = [
+        "anthropic",
+        "openai",
+        "python-dotenv",
+        "google-genai",
+        "tqdm",
+        "pydantic",
+        "scikit-learn",
+        "pandas",
+        "numpy",
+    ]
 
     @classmethod
     def from_env(cls) -> Config:
