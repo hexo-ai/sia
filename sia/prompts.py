@@ -15,11 +15,62 @@ if TYPE_CHECKING:
     from sia.run_setup import TaskFiles
 
 
+# Appended ONLY in Harbor mode. The base prompts above stay byte-identical (golden-master
+# safe); this block redefines the target agent's contract for in-container execution so it
+# satisfies a Harbor task's native verifier instead of writing a local submission file.
+HARBOR_META_PROMPT = """
+
+================================================================================
+HARBOR MODE — IN-CONTAINER EXECUTION CONTRACT (OVERRIDES THE DATASET/SUBMISSION RULES ABOVE)
+================================================================================
+Your target_agent.py is NOT run against a local dataset directory and there is NO
+submission file or evaluate.py. Instead it is uploaded into the Docker container of
+each benchmark task and executed INSIDE that container; the task's own verifier
+inspects the final state of the container to score you.
+
+Use THIS command-line contract (ignore the earlier --dataset_dir / submission rules):
+
+    python3 target_agent.py --working_dir <dir> --instruction_file <path> --log_dir <dir>
+
+  --working_dir       directory to operate in; create the required output files here
+  --instruction_file  path to the task instruction describing what to accomplish
+  --log_dir           write your trajectory to <log_dir>/agent_execution.json
+
+Runtime guarantees inside the container:
+  * internet is available,
+  * an LLM API key is exported (ANTHROPIC_API_KEY),
+  * the solver model id is in env var SIA_TASK_MODEL (use it; it equals {task_model}),
+  * the `anthropic` SDK is installed.
+
+Build an agentic loop: read the instruction, use the model with a bash tool to explore
+the working directory, create/edit files, and verify your work, then stop when done.
+The "reference target agent" shown above already follows THIS exact contract — model
+your target_agent.py on it. Record every step to <log_dir>/agent_execution.json. Do NOT
+write a submission file; satisfy the task by leaving the container in the requested state.
+"""
+
+HARBOR_FEEDBACK_PROMPT = """
+
+================================================================================
+HARBOR MODE
+================================================================================
+The target agent runs INSIDE each benchmark task's Docker container (no dataset dir,
+no submission file). Its CLI contract is:
+    python3 target_agent.py --working_dir <dir> --instruction_file <path> --log_dir <dir>
+The score is the mean reward from the benchmark's own verifiers — see the EVALUATION
+RESULTS (results.json): per_task rewards, n_solved, n_errors. When you rewrite
+target_agent.py, KEEP this exact CLI contract and the in-container agentic-loop pattern;
+focus on making the agent explore, edit files, and verify more reliably across diverse
+tasks. Do NOT introduce a submission-file workflow.
+"""
+
+
 def build_meta_prompt(
     task_files: TaskFiles,
     task_model: str,
     working_dir: str,
     provider: Provider | None = None,
+    harbor: bool = False,
 ) -> str:
     """Build the meta-agent prompt for creating the initial target agent.
 
@@ -94,9 +145,10 @@ CRITICAL RULES - FOLLOW EXACTLY:
 Example invocation (paths will vary at runtime):
     python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working
 """
-    if provider is None or provider.client_kind != "openai":
-        return base
-    return build_target_client_setup(provider, task_model) + base
+    prompt = base if provider is None or provider.client_kind != "openai" else build_target_client_setup(provider, task_model) + base
+    if harbor:
+        prompt = prompt + HARBOR_META_PROMPT.replace("{task_model}", task_model)
+    return prompt
 
 
 def build_target_client_setup(provider: Provider, task_model: str) -> str:
@@ -141,11 +193,12 @@ def build_feedback_prompt(
     next_gen_dir: str,
     previous_gens: str,
     stdout_log_file: str,
+    harbor: bool = False,
 ) -> str:
     """Build the feedback agent prompt for improving the target agent."""
     context_md_path = os.path.join(run_dir, "context.md")
 
-    return f"""You are an expert AI Engineer analyzing agent scaffolds for iterative improvement.
+    prompt = f"""You are an expert AI Engineer analyzing agent scaffolds for iterative improvement.
 
 **GENERATION CONTEXT**:
 - Current generation: {current_gen}
@@ -233,3 +286,6 @@ Follow these steps:
 
 NOTE: The agent execution log may be incomplete or contain errors if the target agent crashed. If you see an "error" field, focus on making the agent more robust to prevent such failures.
 """
+    if harbor:
+        prompt = prompt + HARBOR_FEEDBACK_PROMPT
+    return prompt

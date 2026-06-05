@@ -54,13 +54,14 @@ from pathlib import Path
 
 from sia import __version__, cli
 from sia.config import Config
+from sia.harbor_runner import HarborRun, prepare_harbor_benchmark, run_generation_on_harbor
 from sia.io_utils import file_size_ok, write_text
 from sia.layout import BUNDLED_TASKS, Names, RunLayout, TaskLayout, resolve_task_dir, venv_python_path
 from sia.logging_setup import configure_logging, get_logger
 from sia.profiles import AgentProfile, load_profile
 from sia.prompts import build_feedback_prompt, build_meta_prompt
 from sia.results import FeedbackContext, TargetAgentResult
-from sia.run_setup import RunSetup, TaskFiles, load_task_files, setup_run_directory
+from sia.run_setup import RunSetup, TaskFiles, load_harbor_task_files, load_task_files, setup_run_directory
 from sia.util import run_agent
 
 __all__ = [
@@ -405,6 +406,36 @@ def _run_target_agent(
         return TargetAgentResult(False, stdout, "", error_msg).as_tuple()
 
 
+def _run_target_agent_on_harbor(target_agent_path: str, gen_dir: str, harbor: HarborRun) -> tuple[bool, str, str]:
+    """Run this generation's agent on a Harbor benchmark. Returns (success, stdout, error_msg).
+
+    run_generation_on_harbor writes results.json + agent_execution/ into gen_dir, so the
+    downstream feedback path consumes them exactly as in local mode.
+    """
+    try:
+        results = run_generation_on_harbor(
+            target_agent_path=target_agent_path,
+            gen_dir=gen_dir,
+            task_model=harbor.task_model,
+            benchmark=harbor.benchmark_path,
+            working_dir=harbor.working_dir,
+            include_tasks=harbor.include_tasks,
+        )
+    except Exception as e:
+        msg = f"Harbor run failed: {e!s}"
+        logger.exception(f"  ✗ {msg}")
+        return False, msg, msg
+
+    success = "error" not in results and results["n_tasks"] > 0
+    summary = (
+        f"Harbor benchmark: {results['benchmark']}\n"
+        f"score (mean reward): {results['score']:.4f}\n"
+        f"solved: {results['n_solved']}/{results['n_tasks']} | errors: {results['n_errors']}"
+    )
+    logger.info(f"  ✓ Harbor run complete | {summary.splitlines()[-1]}")
+    return success, summary, results.get("error", "")
+
+
 def _build_feedback_context(
     current_gen: int,
     gen_dir: str,
@@ -546,10 +577,12 @@ def _run_feedback_agent(
     env_config: Config,
     dataset_dir: str,
     stdout_log_file: str,
+    task_text: str | None = None,
+    harbor: bool = False,
 ) -> None:
     """Run the feedback agent to create an improved target agent."""
     agent_py = Path(os.path.join(run_dir, f"gen_{current_gen}"), Names.TARGET_AGENT).read_text(encoding="utf-8")
-    task = Path(dataset_dir, "task.md").read_text(encoding="utf-8")
+    task = task_text if task_text is not None else Path(dataset_dir, "task.md").read_text(encoding="utf-8")
 
     previous_gens_list = list(range(1, current_gen)) if current_gen > 1 else []
     previous_gens_text = ", ".join(map(str, previous_gens_list)) if previous_gens_list else "None"
@@ -566,6 +599,7 @@ def _run_feedback_agent(
         next_gen_dir=next_gen_dir,
         previous_gens=previous_gens_text,
         stdout_log_file=stdout_log_file,
+        harbor=harbor,
     )
 
     os.makedirs(next_gen_dir, exist_ok=True)
@@ -599,8 +633,13 @@ def run_generation(
     meta_profile: AgentProfile,
     sandbox: str,
     env_config: Config,
+    harbor: HarborRun | None = None,
 ) -> None:
-    """Execute one generation: run target agent, evaluate, optionally run feedback agent."""
+    """Execute one generation: run target agent, evaluate, optionally run feedback agent.
+
+    When ``harbor`` is set the generation is run on a Harbor benchmark (scored by the
+    benchmark's own verifiers) instead of locally; the rest of the loop is unchanged.
+    """
     run_dir = run_setup.run_directory
     layout = RunLayout(run_dir)
     gen_dir = layout.gen_dir(current_gen)
@@ -613,24 +652,30 @@ def run_generation(
 
     generation_start_time = time.time()
 
-    # Run target agent
-    target_agent_success, target_agent_stdout, target_agent_stderr, target_agent_error_msg = _run_target_agent(
-        venv_dir=run_setup.venv_dir,
-        target_agent_path=target_agent_path,
-        abs_dataset_dir=abs_dataset_dir,
-        gen_dir=gen_dir,
-        stdout_log_file=stdout_log_file,
-        sandbox=sandbox,
-        env_config=env_config,
-    )
+    if harbor is not None:
+        target_agent_success, target_agent_stdout, target_agent_error_msg = _run_target_agent_on_harbor(
+            target_agent_path, gen_dir, harbor
+        )
+        target_agent_stderr = ""
+        stdout_log_file = os.path.join(gen_dir, Names.HARBOR_RUN_LOG)
+        generation_duration = time.time() - generation_start_time
+    else:
+        target_agent_success, target_agent_stdout, target_agent_stderr, target_agent_error_msg = _run_target_agent(
+            venv_dir=run_setup.venv_dir,
+            target_agent_path=target_agent_path,
+            abs_dataset_dir=abs_dataset_dir,
+            gen_dir=gen_dir,
+            stdout_log_file=stdout_log_file,
+            sandbox=sandbox,
+            env_config=env_config,
+        )
+        generation_duration = time.time() - generation_start_time
 
-    generation_duration = time.time() - generation_start_time
-
-    # Run evaluation (if evaluate.py exists)
-    logger.info("=" * 60)
-    logger.info("Running evaluation (if available)...")
-    run_evaluation(gen_dir, dataset_dir, run_setup.venv_dir, config=env_config)
-    logger.info("=" * 60)
+        # Run evaluation (if evaluate.py exists)
+        logger.info("=" * 60)
+        logger.info("Running evaluation (if available)...")
+        run_evaluation(gen_dir, dataset_dir, run_setup.venv_dir, config=env_config)
+        logger.info("=" * 60)
 
     # Add generation to context
     improvement_md_path = layout.improvement_md(current_gen)
@@ -682,6 +727,8 @@ def run_generation(
             env_config=env_config,
             dataset_dir=dataset_dir,
             stdout_log_file=stdout_log_file,
+            task_text=task_files.task_md if harbor is not None else None,
+            harbor=harbor is not None,
         )
     else:
         logger.info(f"Generation {current_gen} is the final generation. Skipping feedback agent.")
@@ -719,8 +766,18 @@ def main():
         serve_in_background(host=args.web_host, port=args.web_port, runs_dir=Names.RUNS_ROOT)
 
     max_gen = args.max_gen
-    task_dir, shared_dir = resolve_task_dir(args.task, args.task_dir)
     run_id = args.run_id
+
+    # Resolve execution mode: exactly one of the four task selectors must be given.
+    harbor_mode = bool(args.harbor_dataset or args.harbor_task_dir)
+    n_selectors = sum(bool(x) for x in (args.task, args.task_dir, args.harbor_dataset, args.harbor_task_dir))
+    if n_selectors != 1:
+        raise SystemExit("Provide exactly one of --task, --task_dir, --harbor_dataset, or --harbor_task_dir")
+    if harbor_mode:
+        task_dir, shared_dir, benchmark = None, None, (args.harbor_dataset or args.harbor_task_dir)
+    else:
+        task_dir, shared_dir = resolve_task_dir(args.task, args.task_dir)
+        benchmark = None
 
     # Resolve agent profiles (each bundles backend + model + provider).
     meta_profile = load_profile(args.meta_profile)
@@ -732,7 +789,12 @@ def main():
 
     logger.info("Configuration:")
     logger.info(f"  - Maximum generations: {max_gen}")
-    logger.info(f"  - Task directory: {task_dir}")
+    if harbor_mode:
+        logger.info(f"  - Harbor benchmark: {benchmark}")
+        if args.harbor_include_task:
+            logger.info(f"  - Harbor tasks (filter): {', '.join(args.harbor_include_task)}")
+    else:
+        logger.info(f"  - Task directory: {task_dir}")
     logger.info(f"  - Run ID: {run_id}")
     logger.info(
         f"  - Meta profile: {meta_profile.profile_id} (backend={backend}, model={meta_model}, "
@@ -748,23 +810,28 @@ def main():
             logger.warning(f"  ⚠ {prov.api_key_env} is not set; the {label} agent may fail to authenticate.")
 
     # ========================
-    # SECTION 1: Load Files from Task Directory
+    # SECTION 1+2: Load Task Files + Setup Run Directories
     # ========================
+    # Harbor mode needs the run directory before it can download the benchmark, and
+    # runs the target agent in the benchmark's containers (no local venv).
 
-    task_files = load_task_files(task_dir, shared_dir)
-
-    # ========================
-    # SECTION 2: Setup Run Directories
-    # ========================
-
-    run_setup = setup_run_directory(run_id, task_dir, meta_model, task_model, backend, max_gen, config=env_config)
+    if harbor_mode:
+        run_setup = setup_run_directory(
+            run_id, benchmark, meta_model, task_model, backend, max_gen, config=env_config, create_venv=False
+        )
+        benchmark_path, sample_descriptions = prepare_harbor_benchmark(benchmark, run_setup.run_directory)
+        task_files = load_harbor_task_files(benchmark, sample_descriptions)
+        logger.info(f"  ✓ Harbor benchmark prepared at: {benchmark_path}")
+    else:
+        task_files = load_task_files(task_dir, shared_dir)
+        run_setup = setup_run_directory(run_id, task_dir, meta_model, task_model, backend, max_gen, config=env_config)
 
     # ========================
     # SECTION 3: Build Initial Prompt
     # ========================
 
     meta_agent_prompt = build_meta_prompt(
-        task_files, task_model, run_setup.meta_agent_working_directory, provider=target_provider
+        task_files, task_model, run_setup.meta_agent_working_directory, provider=target_provider, harbor=harbor_mode
     )
 
     # ========================
@@ -791,10 +858,20 @@ def main():
     # SECTION 5: Main Loop - Run Target Agent and Feedback Agent
     # ========================
 
-    task_layout = TaskLayout(task_dir, shared_dir)
-    dataset_directory = task_layout.dataset_dir
-    abs_dataset_directory = task_layout.abs_dataset_dir
-    logger.info(f"Dataset directory: {abs_dataset_directory}")
+    if harbor_mode:
+        dataset_directory = abs_dataset_directory = None
+        harbor_run = HarborRun(
+            benchmark_path=benchmark_path,
+            task_model=task_model,
+            working_dir=args.harbor_working_dir,
+            include_tasks=args.harbor_include_task,
+        )
+    else:
+        task_layout = TaskLayout(task_dir, shared_dir)
+        dataset_directory = task_layout.dataset_dir
+        abs_dataset_directory = task_layout.abs_dataset_dir
+        harbor_run = None
+        logger.info(f"Dataset directory: {abs_dataset_directory}")
 
     for current_gen in range(1, max_gen + 1):
         logger.info("=" * 80)
@@ -811,6 +888,7 @@ def main():
             meta_profile=meta_profile,
             sandbox=args.sandbox,
             env_config=env_config,
+            harbor=harbor_run,
         )
 
     # Finalize context with summary statistics

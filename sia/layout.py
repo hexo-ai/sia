@@ -26,6 +26,7 @@ class Names:
     AGENT_EXECUTION_DIR = "agent_execution"
     EXECUTION_GLOB = "execution_q*.json"
     STDOUT_LOG = "target_agent_stdout.log"
+    HARBOR_RUN_LOG = "harbor_run.log"
     EVAL_LOG = "evaluation.log"
     RESULTS_JSON = "results.json"
     CONTEXT_MD = "context.md"
@@ -42,7 +43,13 @@ class Names:
     SHARED_SAMPLE_EXECUTION = "sample_agent_execution.json"
     SAMPLE_TASK_DESCRIPTIONS = "reference/SAMPLE_TASK_DESCRIPTIONS.md"
     REFERENCE_AGENT = "reference/reference_target_agent.py"
+    REFERENCE_HARBOR_AGENT = "reference_harbor_agent.py"
     SHARED_DIR = "_shared"
+
+
+def bundled_shared_dir() -> str:
+    """Absolute path to the bundled ``sia/tasks/_shared`` directory."""
+    return str(resource_files("sia.tasks") / Names.SHARED_DIR)
 
 
 def venv_python_path(venv_dir: str) -> str:

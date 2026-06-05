@@ -209,6 +209,36 @@ Full step-by-step for both paths: [docs/walkthrough.md](docs/walkthrough.md).
 
 ---
 
+## Run on a Harbor benchmark
+
+Instead of a local task, SIA can self-improve against any external benchmark from the
+[Harbor](https://www.harborframework.com/docs) registry (Terminal-Bench, SWE-Bench, AIME, …). Each
+generation's agent is run **inside the benchmark's own Docker containers** and scored by Harbor's
+native verifiers — no local `evaluate.py` required.
+
+```bash
+uv tool install harbor          # the Harbor CLI (ships its own interpreter)
+harbor auth login               # one-time
+pip install 'sia-agent[claude,harbor]'
+export ANTHROPIC_API_KEY="..."
+
+sia run --harbor_dataset terminal-bench-sample@2.0 --max_gen 3 --run_id 1
+```
+
+| Flag | Description |
+|---|---|
+| `--harbor_dataset NAME@VERSION` | Benchmark to download from the Harbor registry (enables Harbor mode) |
+| `--harbor_task_dir PATH` | Use a pre-downloaded benchmark directory instead |
+| `--harbor_include_task NAME` | Restrict the run to specific task(s); repeatable (cheap for testing) |
+| `--harbor_working_dir DIR` | Container working directory the agent operates in (default `/app`) |
+
+In Harbor mode the meta/feedback prompts gain an injected in-container contract (the base prompts are
+unchanged): the generated `target_agent.py` takes `--working_dir / --instruction_file / --log_dir`,
+runs an agentic bash loop inside the container, and leaves it in the state the verifier expects. See
+[docs/harbor.md](docs/harbor.md) for architecture and details.
+
+---
+
 ## Evaluation
 
 After every generation the orchestrator scores the target agent automatically and
@@ -239,6 +269,7 @@ Full contract, return-format rules, and a complete example: [EVALUATION_GUIDE.md
 
 - [docs/architecture.md](docs/architecture.md) — directory layout, generation flow, prompt customization
 - [docs/walkthrough.md](docs/walkthrough.md) — detailed custom-task walkthrough
+- [docs/harbor.md](docs/harbor.md) — run SIA against external Harbor benchmarks
 - [docs/configuration.md](docs/configuration.md) — backends, models, API keys, CLI reference
 - [EVALUATION_GUIDE.md](EVALUATION_GUIDE.md) — writing `evaluate.py` for a custom task
 - [docs/troubleshooting.md](docs/troubleshooting.md) — common errors and fixes
