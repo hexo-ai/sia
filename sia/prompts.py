@@ -755,6 +755,7 @@ def build_feedback_prompt(
     provider: Provider | None = None,
     requirements_dir: str | None = None,
     focus: str = "harness",
+    knowledge_digest: str | None = None,
 ) -> str:
     """Build the feedback agent prompt for improving the target agent or train.py.
 
@@ -765,6 +766,8 @@ def build_feedback_prompt(
     told it may add/edit a requirements.txt there. ``None`` keeps the historical text.
     """
     context_md_path = os.path.join(run_dir, "context.md")
+    knowledge_section = _knowledge_graph_section(knowledge_digest)
+    improvement_structure_line = _improvement_structure_line(knowledge_digest)
 
     # Handle weights mode (RL-based tuning)
     if focus == "weights":
@@ -773,7 +776,7 @@ def build_feedback_prompt(
 **GENERATION CONTEXT**:
 - Current generation: {current_gen}
 - Previous generations: {previous_gens}
-- Evolution history: {context_md_path}
+- Evolution history: {context_md_path}{knowledge_section}
 
 **BEFORE ANALYZING - READ THE FULL HISTORY**:
 1. Read {context_md_path} to understand:
@@ -830,7 +833,7 @@ Follow these steps:
 
 **STEP 3: Write improvement.md**:
    - MUST save to: {next_gen_dir}/improvement.md
-   - Document your analysis and planned improvements to the RL pipeline
+   - Document your analysis and planned improvements to the RL pipeline{improvement_structure_line}
    - Focus on improving reward signals, training efficiency, or environment design
    - Suggest better Env/EnvGroupBuilder implementations if needed
    - Reference insights from previous generations if applicable
@@ -862,7 +865,7 @@ NOTE: If you see errors or incomplete execution logs, focus on making the RL pip
 **GENERATION CONTEXT**:
 - Current generation: {current_gen}
 - Previous generations: {previous_gens}
-- Evolution history: {context_md_path}
+- Evolution history: {context_md_path}{knowledge_section}
 
 **BEFORE ANALYZING - READ THE FULL HISTORY**:
 1. Read {context_md_path} to understand:
@@ -922,7 +925,7 @@ Follow these steps:
 
 **STEP 3: Write improvement.md**:
    - MUST save to: {next_gen_dir}/improvement.md
-   - Document your analysis and planned improvements
+   - Document your analysis and planned improvements{improvement_structure_line}
    - Focus on structural improvements to the agent scaffold
    - Make the agent more robust and generalizable
    - Don't optimize for this specific task
@@ -954,3 +957,26 @@ NOTE: The agent execution log may be incomplete or contain errors if the target 
     if provider is None or provider.client_kind != "openai":
         return base
     return build_target_client_setup(provider, task_model) + base
+
+
+def _knowledge_graph_section(knowledge_digest: str | None) -> str:
+    """Optional feedback-prompt section; empty preserves historical prompt text."""
+    if not knowledge_digest:
+        return ""
+    return f"""
+
+**EXPERIMENT KNOWLEDGE GRAPH DIGEST**:
+```
+{knowledge_digest}
+```
+
+Use this graph digest to choose the next experiment. Prefer hypotheses supported
+by observed failures, metrics, and prior outcomes. Do not repeat contradicted
+approaches unless the current logs provide new evidence.
+"""
+
+
+def _improvement_structure_line(knowledge_digest: str | None) -> str:
+    if not knowledge_digest:
+        return ""
+    return "\n   - Include sections named Hypothesis, Evidence, Planned Change, Expected Impact, and Risk"

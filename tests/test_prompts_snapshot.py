@@ -65,3 +65,24 @@ def test_feedback_prompt_golden():
         task_model="claude-haiku-4-5-20251001",
     )
     assert_golden("feedback_prompt.txt", prompt)
+
+
+def test_feedback_prompt_includes_knowledge_digest_when_provided():
+    prompt = build_feedback_prompt(
+        current_gen=2,
+        max_gen=3,
+        task_files=TASK_FILES,
+        agent_py="print('current target agent gen 2')",
+        task="# Example Task\nSolve the example problem precisely.",
+        execution_status="SUCCESS: example status block",
+        execution_section="EXECUTION SECTION BODY",
+        run_dir="/RUN/run_1",
+        next_gen_dir="/RUN/run_1/gen_3",
+        previous_gens="1",
+        task_model="claude-haiku-4-5-20251001",
+        knowledge_digest="experiment:gen_2 tested hypothesis:validation",
+    )
+
+    assert "EXPERIMENT KNOWLEDGE GRAPH DIGEST" in prompt
+    assert "experiment:gen_2 tested hypothesis:validation" in prompt
+    assert "Include sections named Hypothesis, Evidence, Planned Change, Expected Impact, and Risk" in prompt

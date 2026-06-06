@@ -19,6 +19,8 @@ from sia.logging_setup import get_logger
 
 logger = get_logger(__name__)
 
+METRIC_RESULT_FILES = ("results.json", "evaluation_results.json", "detailed_results.json")
+
 
 class ContextManager:
     """Manages context.md for tracking generation evolution in a run"""
@@ -339,37 +341,17 @@ class ContextManager:
         """Extract performance metrics from various sources"""
         metrics = {}
 
-        # Priority 1: results.json - load ALL fields generically
-        results_path = os.path.join(gen_dir, "results.json")
-        if os.path.exists(results_path):
-            data = _safe_load_json(results_path)
-            if data is not None and isinstance(data, dict):
-                # Extract all top-level scalar values (skip nested dicts/lists for now)
-                for key, value in data.items():
-                    if isinstance(value, (int, float, str, bool)):
-                        metrics[key] = value
-                    # For common nested structures, try to extract useful info
-                    elif key == "per_class" and isinstance(value, dict):
-                        # Skip per_class details, too verbose for context
-                        continue
-                    elif isinstance(value, dict):
-                        # Skip other nested dicts
-                        continue
-                    elif isinstance(value, list) and len(value) > 0:
-                        # Skip lists
-                        continue
+        # Priority 1: structured result files, in compatibility order.
+        for filename in METRIC_RESULT_FILES:
+            results_path = os.path.join(gen_dir, filename)
+            if os.path.exists(results_path):
+                data = _safe_load_json(results_path)
+                if data is not None and isinstance(data, dict):
+                    metrics.update(self._scalar_metrics(data))
+                if metrics:
+                    break
 
-        # Priority 2: detailed_results.json
-        detailed_results_path = os.path.join(gen_dir, "detailed_results.json")
-        if os.path.exists(detailed_results_path) and not metrics:
-            data = _safe_load_json(detailed_results_path)
-            if data is not None and isinstance(data, dict):
-                # Extract all top-level scalar values
-                for key, value in data.items():
-                    if isinstance(value, (int, float, str, bool)):
-                        metrics[key] = value
-
-        # Priority 3: Parse stdout (check both harness and weights mode log files)
+        # Priority 2: Parse stdout (check both harness and weights mode log files)
         stdout_path = None
         for log_name in ("target_agent_stdout.log", "train_stdout.log"):
             potential_path = os.path.join(gen_dir, log_name)
@@ -380,6 +362,14 @@ class ContextManager:
         if stdout_path and not metrics:
             metrics.update(self._parse_stdout_metrics(stdout_path))
 
+        return metrics
+
+    def _scalar_metrics(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Extract all top-level scalar values from a result payload."""
+        metrics = {}
+        for key, value in data.items():
+            if isinstance(value, (int, float, str, bool)):
+                metrics[key] = value
         return metrics
 
     def _parse_stdout_metrics(self, stdout_path: str) -> dict[str, Any]:

@@ -85,6 +85,39 @@ def test_add_generation_with_results_json(context_mgr, run_dir):
     assert "0.85" in content
 
 
+def test_add_generation_with_evaluation_results_json(context_mgr, run_dir):
+    gen_dir = run_dir / "gen_1"
+    results = {"accuracy": 1.0, "correct": 3, "missing": 195, "details": [{"status": "missing"}]}
+    (gen_dir / "evaluation_results.json").write_text(json.dumps(results))
+
+    context_mgr.add_generation(
+        gen_num=1,
+        gen_data={
+            "success": True,
+            "timestamp": "2025-01-01 00:00:00",
+            "duration": 5.0,
+            "agent_path": str(gen_dir / "target_agent.py"),
+            "gen_dir": str(gen_dir),
+            "improvement_path": None,
+            "execution_type": "Single",
+        },
+    )
+
+    content = (run_dir / "context.md").read_text()
+    assert "accuracy" in content
+    assert "missing" in content
+    assert "195" in content
+    assert "details" not in content
+
+
+def test_extract_metrics_prefers_results_json(context_mgr, run_dir):
+    gen_dir = run_dir / "gen_1"
+    (gen_dir / "results.json").write_text(json.dumps({"accuracy": 0.25}))
+    (gen_dir / "evaluation_results.json").write_text(json.dumps({"accuracy": 1.0}))
+
+    assert context_mgr._extract_metrics(str(gen_dir)) == {"accuracy": 0.25}
+
+
 def test_finalize_with_metrics(context_mgr, run_dir):
     gen1 = run_dir / "gen_1"
     (gen1 / "results.json").write_text(json.dumps({"accuracy": 0.80}))

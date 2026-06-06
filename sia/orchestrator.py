@@ -56,6 +56,16 @@ from sia import __version__, cli
 from sia.agent_reference import ResolvedAgentReference, copy_reference_into, resolve_agent_reference
 from sia.config import Config
 from sia.io_utils import file_size_ok, write_text
+from sia.knowledge_graph import (
+    KnowledgeGraph,
+    graph_json_path,
+    graph_markdown_path,
+    new_graph,
+    render_digest,
+    save_graph,
+    update_after_generation,
+    write_markdown_digest,
+)
 from sia.layout import BUNDLED_TASKS, Names, RunLayout, TaskLayout, resolve_task_dir, venv_python_path
 from sia.logging_setup import configure_logging, get_logger
 from sia.profiles import MetaAgentProfile, load_meta_agent_profile, load_target_agent_profile
@@ -566,6 +576,7 @@ def _run_feedback_agent(
     target_provider: Provider,
     focus: str = "harness",
     resolved_ref: ResolvedAgentReference | None = None,
+    knowledge_digest: str | None = None,
 ) -> None:
     """Run the feedback agent to create an improved target agent or train.py.
 
@@ -604,6 +615,7 @@ def _run_feedback_agent(
         provider=target_provider,
         requirements_dir=requirements_dir,
         focus=focus,
+        knowledge_digest=knowledge_digest,
     )
 
     os.makedirs(next_gen_dir, exist_ok=True)
@@ -647,6 +659,7 @@ def run_generation(
     focus: str = "harness",
     training_sandbox: str = "modal",
     resolved_ref: ResolvedAgentReference | None = None,
+    knowledge_graph: KnowledgeGraph | None = None,
 ) -> None:
     """Execute one generation: run target agent, evaluate, optionally run feedback agent.
 
@@ -712,6 +725,16 @@ def run_generation(
         },
     )
 
+    if knowledge_graph is not None:
+        try:
+            prev_gen_dir = layout.gen_dir(current_gen - 1) if current_gen > 1 else None
+            update_after_generation(knowledge_graph, current_gen, gen_dir, prev_gen_dir=prev_gen_dir)
+            save_graph(knowledge_graph, graph_json_path(run_dir))
+            write_markdown_digest(knowledge_graph, graph_markdown_path(run_dir))
+            logger.info(f"  ✓ Updated experiment knowledge graph: {graph_json_path(run_dir)}")
+        except Exception as e:
+            logger.warning(f"  ⚠ Failed to update experiment knowledge graph: {e}")
+
     # Run feedback agent (if not the last generation)
     if current_gen < max_gen:
         logger.info(f"Running feedback agent for generation {current_gen}")
@@ -732,6 +755,7 @@ def run_generation(
 
         next_gen = current_gen + 1
         next_gen_directory = layout.gen_dir(next_gen)
+        knowledge_digest = render_digest(knowledge_graph) if knowledge_graph is not None else None
 
         _run_feedback_agent(
             current_gen=current_gen,
@@ -748,6 +772,7 @@ def run_generation(
             target_provider=target_provider,
             focus=focus,
             resolved_ref=resolved_ref,
+            knowledge_digest=knowledge_digest,
         )
     else:
         logger.info(f"Generation {current_gen} is the final generation. Skipping feedback agent.")
@@ -865,6 +890,10 @@ def main():
         meta_profile=meta_profile,
         target_profile=target_profile,
     )
+    knowledge_graph = new_graph(task_dir, run_setup.run_directory)
+    save_graph(knowledge_graph, graph_json_path(run_setup.run_directory))
+    write_markdown_digest(knowledge_graph, graph_markdown_path(run_setup.run_directory))
+    logger.info(f"  ✓ Initialized experiment knowledge graph: {graph_json_path(run_setup.run_directory)}")
 
     # ========================
     # SECTION 3: Build Initial Prompt
@@ -940,6 +969,7 @@ def main():
             focus=args.focus,
             training_sandbox=args.training_sandbox,
             resolved_ref=resolved_ref,
+            knowledge_graph=knowledge_graph,
         )
 
         # Early stopping for weights mode: if feedback agent signaled completion

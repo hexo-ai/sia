@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from sia.config import Config
 from sia.context_manager import ContextManager
+from sia.knowledge_graph import graph_json_path, new_graph
 from sia.orchestrator import (
     RunSetup,
     TaskFiles,
@@ -256,3 +257,45 @@ def test_two_generations_with_feedback(mock_run_ta, mock_run_fb, mock_llm, tmp_p
     ctx_final = (run_dir / "context.md").read_text()
     assert "Summary Statistics" in ctx_final
     assert "**Total Generations**: 2" in ctx_final
+
+
+@patch("sia.orchestrator.run_evaluation")
+@patch("sia.orchestrator._run_feedback_agent")
+@patch("sia.orchestrator._run_target_agent")
+def test_run_generation_updates_knowledge_graph_and_feedback_digest(
+    mock_run_ta,
+    mock_run_fb,
+    mock_run_eval,
+    tmp_path,
+):
+    task_dir, _ = _make_task_files(tmp_path)
+    run_setup = _make_run_setup(tmp_path, task_dir)
+    graph = new_graph(str(task_dir), run_setup.run_directory)
+
+    mock_run_ta.return_value = (True, "output", "", "")
+
+    def _fake_eval(gen_dir, *_args, **_kwargs):
+        (Path(gen_dir) / "results.json").write_text(json.dumps({"accuracy": 0.5}), encoding="utf-8")
+        return {"status": "success"}
+
+    mock_run_eval.side_effect = _fake_eval
+
+    run_generation(
+        current_gen=1,
+        max_gen=2,
+        run_setup=run_setup,
+        task_files=TaskFiles("d", "r", {}, "# T"),
+        abs_dataset_dir="/data",
+        dataset_dir="/data",
+        meta_profile=DEFAULT_META_PROFILE,
+        sandbox="none",
+        env_config=Config(),
+        task_model=DEFAULT_TARGET_PROFILE.model,
+        target_provider=DEFAULT_TARGET_PROFILE.provider,
+        knowledge_graph=graph,
+    )
+
+    assert Path(graph_json_path(run_setup.run_directory)).is_file()
+    mock_run_fb.assert_called_once()
+    digest = mock_run_fb.call_args.kwargs["knowledge_digest"]
+    assert "generation:1 has_metric metric:gen_1:accuracy" in digest
