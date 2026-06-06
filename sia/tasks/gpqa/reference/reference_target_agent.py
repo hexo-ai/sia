@@ -130,7 +130,7 @@ async def get_answer_async(
                     response = await client.chat.completions.create(
                         model=MODEL_NAME,
                         messages=[{"role": "user", "content": prompt}],
-                        temperature=0.0,
+                        temperature=0.6,
                         max_tokens=1000,
                         # Some models might not support json_object mode, but Tinker usually does
                         response_format={"type": "json_object"}
