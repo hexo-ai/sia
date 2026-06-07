@@ -1,0 +1,7 @@
+{
+  "profile_id": "deepseek-nebius-target",
+  "name": "DeepSeek V3.2 on Nebius",
+  "model": "deepseek-ai/DeepSeek-V3-2505",
+  "provider_id": "nebius",
+  "agent_reference": "default"
+}
