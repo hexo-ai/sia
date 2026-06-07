@@ -299,3 +299,37 @@ def test_run_generation_updates_knowledge_graph_and_feedback_digest(
     mock_run_fb.assert_called_once()
     digest = mock_run_fb.call_args.kwargs["knowledge_digest"]
     assert "generation:1 has_metric metric:gen_1:accuracy" in digest
+
+
+@patch("sia.orchestrator.run_evaluation")
+@patch("sia.orchestrator._run_feedback_agent")
+@patch("sia.orchestrator._run_target_agent")
+def test_run_generation_without_knowledge_graph_skips_feedback_digest(
+    mock_run_ta,
+    mock_run_fb,
+    mock_run_eval,
+    tmp_path,
+):
+    task_dir, _ = _make_task_files(tmp_path)
+    run_setup = _make_run_setup(tmp_path, task_dir)
+
+    mock_run_ta.return_value = (True, "output", "", "")
+    mock_run_eval.return_value = {"status": "skipped"}
+
+    run_generation(
+        current_gen=1,
+        max_gen=2,
+        run_setup=run_setup,
+        task_files=TaskFiles("d", "r", {}, "# T"),
+        abs_dataset_dir="/data",
+        dataset_dir="/data",
+        meta_profile=DEFAULT_META_PROFILE,
+        sandbox="none",
+        env_config=Config(),
+        task_model=DEFAULT_TARGET_PROFILE.model,
+        target_provider=DEFAULT_TARGET_PROFILE.provider,
+    )
+
+    assert not Path(graph_json_path(run_setup.run_directory)).exists()
+    mock_run_fb.assert_called_once()
+    assert mock_run_fb.call_args.kwargs["knowledge_digest"] is None

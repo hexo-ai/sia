@@ -60,6 +60,18 @@ to include these sections:
 Those headings make later graph extraction more reliable while preserving the
 existing two-file feedback-agent contract.
 
+## Ablation Runs
+
+The graph is enabled by default. To run a baseline without graph artifacts or
+feedback-prompt digest injection, pass:
+
+```bash
+sia run --task gpqa --no-knowledge-graph
+```
+
+This is useful for comparing standard SIA feedback against graph-augmented
+feedback on the same task and model profile.
+
 ## Future Research Integration
 
 The graph is designed to be seeded by an external research provider later. For

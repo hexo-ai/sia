@@ -420,8 +420,12 @@ def _add_failure_observations(graph: KnowledgeGraph, gen_id: str, gen_path: Path
         lower = content.lower()
         if "traceback" in lower or "error" in lower or "failed" in lower:
             failure = "failure:execution_error"
-            if "timeout" in lower:
+            if "empty model response" in lower:
+                failure = "failure:empty_model_response"
+            elif "timeout" in lower:
                 failure = "failure:timeout"
+            elif "results.json not found" in lower:
+                failure = "failure:missing_results_json"
             elif "json" in lower:
                 failure = "failure:json_or_logging_error"
             add_observation(graph, subject=failure, predicate="observed_in", object=gen_id, source=str(path))

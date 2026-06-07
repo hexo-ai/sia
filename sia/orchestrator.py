@@ -890,10 +890,14 @@ def main():
         meta_profile=meta_profile,
         target_profile=target_profile,
     )
-    knowledge_graph = new_graph(task_dir, run_setup.run_directory)
-    save_graph(knowledge_graph, graph_json_path(run_setup.run_directory))
-    write_markdown_digest(knowledge_graph, graph_markdown_path(run_setup.run_directory))
-    logger.info(f"  ✓ Initialized experiment knowledge graph: {graph_json_path(run_setup.run_directory)}")
+    knowledge_graph = None
+    if args.knowledge_graph:
+        knowledge_graph = new_graph(task_dir, run_setup.run_directory)
+        save_graph(knowledge_graph, graph_json_path(run_setup.run_directory))
+        write_markdown_digest(knowledge_graph, graph_markdown_path(run_setup.run_directory))
+        logger.info(f"  ✓ Initialized experiment knowledge graph: {graph_json_path(run_setup.run_directory)}")
+    else:
+        logger.info("  → Experiment knowledge graph disabled")
 
     # ========================
     # SECTION 3: Build Initial Prompt

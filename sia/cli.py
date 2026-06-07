@@ -96,6 +96,19 @@ def _add_run_args(parser: argparse.ArgumentParser, env_config: Config) -> None:
         help="Sandbox for train.py code execution in weights mode (default: modal). Use 'sandboxfusion' for SandboxFusion service.",
     )
     parser.add_argument(
+        "--knowledge-graph",
+        dest="knowledge_graph",
+        action="store_true",
+        default=True,
+        help="Enable the experiment knowledge graph and inject its digest into feedback prompts (default).",
+    )
+    parser.add_argument(
+        "--no-knowledge-graph",
+        dest="knowledge_graph",
+        action="store_false",
+        help="Disable experiment knowledge graph artifacts and feedback-prompt digest injection.",
+    )
+    parser.add_argument(
         "--log-level",
         dest="log_level",
         type=str,

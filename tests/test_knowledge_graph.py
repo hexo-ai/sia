@@ -148,6 +148,25 @@ Add JSON schema validation.
     assert any(obs.predicate == "tested" and "Validation improves" in obs.properties.get("text", "") for obs in graph.observations)
 
 
+def test_update_after_generation_extracts_empty_model_response_failure(tmp_path):
+    gen1 = tmp_path / "gen_1"
+    gen1.mkdir()
+    (gen1 / "target_agent_stdout.log").write_text(
+        "Error on question 1: empty model response\n",
+        encoding="utf-8",
+    )
+
+    graph = new_graph(str(tmp_path / "task"), str(tmp_path / "run_1"))
+    update_after_generation(graph, 1, gen1)
+
+    assert any(
+        obs.subject == "failure:empty_model_response"
+        and obs.predicate == "observed_in"
+        and obs.object == "generation:1"
+        for obs in graph.observations
+    )
+
+
 def test_render_digest_includes_recent_observations_and_details(tmp_path):
     graph = new_graph(str(tmp_path / "task"), str(tmp_path / "run_1"))
     add_observation(
