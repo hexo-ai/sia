@@ -255,6 +255,7 @@ python my-task/data/public/evaluate.py --gen-dir runs/run_1/gen_1   # should wri
 ```
 
 Full contract, return-format rules, and a complete example: [EVALUATION_GUIDE.md](EVALUATION_GUIDE.md).
+For metric robustness and anti-gaming checks, see [docs/evaluator_design.md](docs/evaluator_design.md).
 
 ---
 
@@ -264,6 +265,7 @@ Full contract, return-format rules, and a complete example: [EVALUATION_GUIDE.md
 - [docs/walkthrough.md](docs/walkthrough.md) — detailed custom-task walkthrough
 - [docs/configuration.md](docs/configuration.md) — agent impls, models, API keys, CLI reference
 - [EVALUATION_GUIDE.md](EVALUATION_GUIDE.md) — writing `evaluate.py` for a custom task
+- [docs/evaluator_design.md](docs/evaluator_design.md) — evaluator robustness, private data separation, anti-gaming checks
 - [docs/troubleshooting.md](docs/troubleshooting.md) — common errors and fixes
 
 ## Citation

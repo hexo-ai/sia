@@ -9,6 +9,10 @@ After each generation, the orchestrator automatically runs evaluation:
 3. Your `evaluate.py` finds the submission file, evaluates it, and saves `results.json`
 4. Orchestrator loads `results.json` and adds metrics to feedback prompt
 
+Because the feedback loop optimizes this signal, evaluator design matters. See
+[docs/evaluator_design.md](docs/evaluator_design.md) for a checklist on robust
+metrics, private data separation, and anti-gaming checks.
+
 ## Location
 
 Place `evaluate.py` in: `tasks/<task_name>/data/public/evaluate.py`
