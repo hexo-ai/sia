@@ -278,7 +278,7 @@ def main():
         "--output",
         type=Path,
         default=None,
-        help="Path to save evaluation results (default: gen-dir/evaluation_results.json)"
+        help="Path to save evaluation results (default: gen-dir/results.json)"
     )
 
     args = parser.parse_args()
@@ -317,9 +317,9 @@ def main():
     if args.output:
         output_path = args.output
     elif args.gen_dir:
-        output_path = args.gen_dir / "evaluation_results.json"
+        output_path = args.gen_dir / "results.json"
     else:
-        output_path = submission_path.parent / "evaluation_results.json"
+        output_path = submission_path.parent / "results.json"
 
     # Save results
     print(f"Saving results to: {output_path}")
