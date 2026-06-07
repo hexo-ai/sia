@@ -39,6 +39,13 @@ def _add_run_args(parser: argparse.ArgumentParser, env_config: Config) -> None:
         help="Maximum number of generations to run (default: 3)",
     )
     parser.add_argument("--run_id", type=int, default=1, help="Run ID for this experiment (default: 1)")
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        dest="max_samples",
+        help="Limit dataset to this many samples (useful for quick test runs)",
+    )
     task_group = parser.add_mutually_exclusive_group(required=True)
     task_group.add_argument(
         "--task",

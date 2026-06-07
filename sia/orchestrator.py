@@ -383,6 +383,9 @@ def _run_target_agent(
     sandbox_url = os.getenv("SANDBOX_URL", "http://localhost:8080")
     env["SANDBOX_URL"] = sandbox_url
     logger.info(f"  → SANDBOX_URL: {sandbox_url}")
+    if env_config.MAX_SAMPLES is not None:
+        env["SIA_MAX_SAMPLES"] = str(env_config.MAX_SAMPLES)
+        logger.info(f"  → SIA_MAX_SAMPLES: {env_config.MAX_SAMPLES}")
 
     try:
         if sandbox == "docker":
@@ -799,6 +802,10 @@ def main():
     if args.command == "web":
         _run_web(args)
         return
+
+    # CLI --max-samples overrides env var
+    if getattr(args, "max_samples", None) is not None:
+        env_config.MAX_SAMPLES = args.max_samples
 
     # Apply CLI log level (overrides the import-time default / $SIA_LOG_LEVEL).
     configure_logging(args.log_level)

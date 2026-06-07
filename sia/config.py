@@ -24,6 +24,7 @@ class Config:
     # Generation defaults
     DEFAULT_MAX_GENERATIONS: int = 3
     DEFAULT_RUN_ID: int = 1
+    MAX_SAMPLES: int | None = None
 
     # Agent execution
     DEFAULT_MAX_TURNS: int = 20
@@ -85,6 +86,7 @@ class Config:
             "SIA_AGENT_IMPL": ("DEFAULT_AGENT_IMPL", str),
             "SIA_MAX_TURNS": ("DEFAULT_MAX_TURNS", int),
             "SIA_SANDBOX_MODE": ("SANDBOX_MODE", str),
+            "SIA_MAX_SAMPLES": ("MAX_SAMPLES", int),
         }
         for env_var, (attr, converter) in env_map.items():
             val = os.environ.get(env_var)

@@ -252,6 +252,9 @@ def main():
 
     # Load questions
     questions = json.loads(data_file.read_text(encoding="utf-8"))
+    max_samples = os.getenv("SIA_MAX_SAMPLES")
+    if max_samples is not None:
+        questions = questions[: int(max_samples)]
 
     client = setup_client()
     question_results = asyncio.run(get_all_answers_async(questions, client, CONCURRENCY))
