@@ -43,6 +43,7 @@ runs/
 """
 
 import asyncio
+import contextlib
 import glob
 import json
 import os
@@ -51,6 +52,7 @@ import time
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sia import __version__, cli
 from sia.agent_reference import ResolvedAgentReference, copy_reference_into, resolve_agent_reference
@@ -59,7 +61,7 @@ from sia.io_utils import file_size_ok, write_text
 from sia.layout import BUNDLED_TASKS, Names, RunLayout, TaskLayout, resolve_task_dir, venv_python_path
 from sia.logging_setup import configure_logging, get_logger
 from sia.profiles import MetaAgentProfile, load_meta_agent_profile, load_target_agent_profile
-from sia.prompts import build_feedback_prompt, build_meta_prompt
+from sia.prompts import HELD_OUT_GROUND_TRUTH_NOTICE, build_feedback_prompt, build_meta_prompt
 from sia.providers import Provider
 from sia.results import FeedbackContext, TargetAgentResult
 from sia.run_setup import RunSetup, TaskFiles, install_requirements, load_task_files, setup_run_directory
@@ -67,14 +69,17 @@ from sia.util import run_agent
 
 __all__ = [
     "BUNDLED_TASKS",
+    "HELD_OUT_GROUND_TRUTH_NOTICE",
     "RunSetup",
     "TaskFiles",
     "build_feedback_prompt",
     "build_meta_prompt",
+    "compute_protected_paths",
     "load_agent_execution",
     "load_task_files",
     "main",
     "resolve_task_dir",
+    "restricted_access",
     "run_evaluation",
     "run_generation",
     "setup_run_directory",
@@ -86,6 +91,54 @@ logger = get_logger(__name__)
 # ========================
 # HELPER FUNCTIONS
 # ========================
+
+
+def compute_protected_paths(task_dir: str) -> list[str]:
+    """Return the task's held-out ground-truth dirs that meta/feedback agents must not read.
+
+    Generic across all SIA tasks: the public/private convention places grader-only ground
+    truth under ``<task_dir>/data/private``. Returns the absolute path when that dir exists,
+    or an empty list (no-op) when the task ships no private dir.
+    """
+    private_dir = os.path.join(task_dir, "data/private")
+    if os.path.isdir(private_dir):
+        return [os.path.abspath(private_dir)]
+    return []
+
+
+@contextlib.contextmanager
+def restricted_access(paths: list[str], enabled: bool):
+    """Temporarily strip all filesystem permissions on ``paths`` for the duration of the block.
+
+    Impl-agnostic OS-level backstop to the prompt notice + claude-impl PreToolUse tripwire:
+    while a meta/feedback agent runs, a read of the task's held-out ``data/private`` fails at
+    the filesystem layer even via a subprocess, an obfuscated shell, or a path the substring
+    matcher would miss — and for the agent impls that ignore the PreToolUse kwarg, this is the
+    only filesystem defense. The original mode is restored on exit (including on error). A
+    no-op when ``enabled`` is False or ``paths`` is empty.
+
+    Process-global by nature (it chmods a shared dir), so it is applied only around the
+    sequential meta/feedback agent calls — never around grading, which legitimately reads the
+    dir. Does not defend against a root process or a copy-out-then-read, and a hard kill
+    (SIGKILL) mid-block leaves the dir stripped until restored; OS-level container sandboxing
+    (``--sandbox docker``) remains the strongest boundary.
+    """
+    if not enabled or not paths:
+        yield
+        return
+    saved: list[tuple[str, int]] = []
+    try:
+        for path in paths:
+            try:
+                saved.append((path, os.stat(path).st_mode))
+                os.chmod(path, 0o000)
+            except OSError as exc:
+                logger.warning(f"private-dir guard: could not restrict {path}: {exc}")
+        yield
+    finally:
+        for path, mode in saved:
+            with contextlib.suppress(OSError):
+                os.chmod(path, mode)
 
 
 def load_agent_execution(gen_directory, config: Config | None = None):
@@ -422,6 +475,122 @@ def _run_target_agent(
         return TargetAgentResult(False, stdout, "", error_msg).as_tuple()
 
 
+# Generic render whitelist for a single failing eval item. Only these keys reach the
+# feedback prompt — no task-shaped key (e.g. a reference answer carried elsewhere) can
+# ride along.
+_ITEM_RENDER_FIELDS = ("id", "group", "status", "category", "input", "output", "detail")
+
+_ANTI_REWARD_HACK_FRAMING = (
+    "The held-out reference answers are intentionally withheld. Improve the agent by "
+    "reasoning about WHY these inputs failed (the failing inputs/outputs above) — "
+    "never by hardcoding or matching specific answers."
+)
+
+
+def _select_failures(items: list[Any], pass_statuses: tuple[str, ...], max_failures: int) -> list[dict]:
+    """Pick up to `max_failures` FAILED items, diversified across status and group.
+
+    Round-robins over (status, group) buckets so a single dominant status or group
+    cannot crowd out the others — the feedback agent sees a spread of failure modes.
+    Reads only the generic `status` and `group` item keys.
+    """
+    pass_set = set(pass_statuses)
+    buckets: dict[tuple[str, str], list[dict]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        status = item.get("status")
+        if status in pass_set:
+            continue
+        key = (str(status), str(item.get("group")))
+        buckets.setdefault(key, []).append(item)
+
+    selected: list[dict] = []
+    bucket_lists = list(buckets.values())
+    cursor = 0
+    while len(selected) < max_failures and any(bucket_lists):
+        bucket = bucket_lists[cursor % len(bucket_lists)]
+        if bucket:
+            selected.append(bucket.pop(0))
+        cursor += 1
+        if cursor % len(bucket_lists) == 0:
+            bucket_lists = [b for b in bucket_lists if b]
+            cursor = 0
+    return selected
+
+
+def _render_item(item: dict) -> dict:
+    """Project a failing item onto the generic render whitelist (present keys only).
+
+    Constructs a NEW dict containing only `_ITEM_RENDER_FIELDS` keys that are present
+    in the item — never copies the source dict, so no task-specific key (and no
+    reference answer carried elsewhere) can ride along.
+    """
+    return {field: item[field] for field in _ITEM_RENDER_FIELDS if field in item}
+
+
+def _collect_scalars(data: dict) -> dict:
+    """Recursively project a results.json mapping onto its scalar metrics only.
+
+    Keeps scalar leaves (numbers, strings, booleans) at any nesting depth and preserves
+    the surrounding dict shape, so aggregate blocks such as a nested ``summary`` object
+    survive. Every list is DROPPED: per-item record arrays (e.g. ``results`` / ``details``)
+    are where a grader's held-out reference answers live, so they never enter the summary.
+    Empty nested dicts are omitted.
+    """
+    out: dict = {}
+    for key, value in data.items():
+        if isinstance(value, (int, float, str, bool)):
+            out[key] = value
+        elif isinstance(value, dict):
+            nested = _collect_scalars(value)
+            if nested:
+                out[key] = nested
+        # lists are intentionally dropped (potential per-item reference answers)
+    return out
+
+
+def _build_eval_summary(
+    eval_data: dict,
+    env_config: Config,
+) -> str:
+    """Render a curated, reference-answer-free eval summary for the feedback prompt.
+
+    Task-agnostic, and a near drop-in for the previous full results.json dump:
+
+    - Every **scalar** metric is emitted as a JSON object, at any nesting depth, preserving
+      the original results.json shape and field names (e.g. ``accuracy``, ``correct``,
+      ``total``, or a nested ``summary`` block) — whatever the grader wrote, in its order.
+    - The reference-answer-free guarantee comes from DROPPING every list: ``results`` /
+      ``details`` (the task-shaped per-item records that may carry reference answers) and
+      any other array are excluded by ``_collect_scalars``. The only per-item channel is
+      the opt-in, generic ``items[]`` array, surfaced solely through the
+      ``_ITEM_RENDER_FIELDS`` whitelist.
+    - When ``items[]`` carries failures, a capped sample (diversified across ``status``
+      and ``group``) plus an anti-reward-hack framing line are appended. A grader that
+      emits only scalars therefore gets output equivalent to the original JSON dump,
+      minus any answer-bearing arrays.
+    """
+    scalars = _collect_scalars(eval_data)
+    summary = f"```json\n{json.dumps(scalars, indent=2)}\n```"
+
+    items = eval_data.get("items")
+    if not isinstance(items, list):
+        items = []
+
+    failures = _select_failures(items, env_config.VERIFIER_PASS_STATUSES, env_config.FEEDBACK_FAILURE_SAMPLES)
+    if failures:
+        shown = [_render_item(item) for item in failures]
+        summary += (
+            f"\n\n**Sample of FAILED held-out items** "
+            f"(up to {env_config.FEEDBACK_FAILURE_SAMPLES}, diversified across status and group):\n"
+            f"```json\n{json.dumps(shown, indent=2)}\n```"
+            f"\n\n{_ANTI_REWARD_HACK_FRAMING}"
+        )
+
+    return summary
+
+
 def _build_feedback_context(
     current_gen: int,
     gen_dir: str,
@@ -504,12 +673,14 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
             else:
                 with open(results_json_path, encoding="utf-8") as f:
                     eval_data = json.load(f)
+                # Curated, gold-free summary — the full results dump leaked every
+                # held-out reference answer to the feedback agent (reward-hacking
+                # surface + turn pressure). Reads only the generic `items[]` contract.
+                eval_summary = _build_eval_summary(eval_data, cfg)
                 eval_results_section = f"""
 
 **EVALUATION RESULTS**:
-```json
-{json.dumps(eval_data, indent=2)}
-```
+{eval_summary}
 """
         except (json.JSONDecodeError, OSError) as e:
             eval_results_section = f"\n**EVALUATION RESULTS**: Error loading results.json: {e}\n"
@@ -617,16 +788,24 @@ def _run_feedback_agent(
     write_text(feedback_prompt_path, feedback_agent_prompt)
     logger.info(f"  ✓ Saved feedback agent prompt to: {feedback_prompt_path}")
 
-    asyncio.run(
-        run_agent(
-            model_name=meta_profile.model,
-            max_turns=str(env_config.DEFAULT_MAX_TURNS),
-            prompt=feedback_agent_prompt,
-            agent_working_directory=next_gen_dir,
-            agent_impl=meta_profile.agent_impl,
-            provider=meta_profile.provider,
+    # dataset_dir is <task_dir>/data/public; the held-out dir is its sibling data/private.
+    task_dir = os.path.dirname(os.path.dirname(dataset_dir))
+    protected_paths = compute_protected_paths(task_dir)
+
+    # OS-level backstop: strip data/private permissions for the duration of the agent run
+    # (grading has already happened upstream and is outside this block).
+    with restricted_access(protected_paths, env_config.PRIVATE_DIR_GUARD):
+        asyncio.run(
+            run_agent(
+                model_name=meta_profile.model,
+                max_turns=str(env_config.DEFAULT_MAX_TURNS),
+                prompt=feedback_agent_prompt,
+                agent_working_directory=next_gen_dir,
+                agent_impl=meta_profile.agent_impl,
+                provider=meta_profile.provider,
+                protected_paths=protected_paths,
+            )
         )
-    )
 
     next_gen = current_gen + 1
     logger.info(f"Feedback agent completed. Created improved agent for generation {next_gen}")
@@ -901,16 +1080,22 @@ def main():
     write_text(meta_agent_prompt_path, meta_agent_prompt)
     logger.info(f"  ✓ Saved meta-agent prompt to: {meta_agent_prompt_path}")
 
-    asyncio.run(
-        run_agent(
-            model_name=meta_model,
-            max_turns=str(env_config.DEFAULT_MAX_TURNS),
-            prompt=meta_agent_prompt,
-            agent_working_directory=run_setup.meta_agent_working_directory,
-            agent_impl=agent_impl,
-            provider=meta_profile.provider,
+    meta_protected_paths = compute_protected_paths(task_dir)
+
+    # OS-level backstop: strip data/private permissions while the meta agent creates the
+    # initial target agent. The grader runs later (Section 5), outside this block.
+    with restricted_access(meta_protected_paths, env_config.PRIVATE_DIR_GUARD):
+        asyncio.run(
+            run_agent(
+                model_name=meta_model,
+                max_turns=str(env_config.DEFAULT_MAX_TURNS),
+                prompt=meta_agent_prompt,
+                agent_working_directory=run_setup.meta_agent_working_directory,
+                agent_impl=agent_impl,
+                provider=meta_profile.provider,
+                protected_paths=meta_protected_paths,
+            )
         )
-    )
 
     # ========================
     # SECTION 5: Main Loop - Run Target Agent and Feedback Agent

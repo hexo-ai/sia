@@ -8,6 +8,16 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 
+def _to_str_tuple(value: str) -> tuple[str, ...]:
+    """Parse a comma-separated env-var string into a tuple of trimmed strings."""
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
+def _to_bool(value: str) -> bool:
+    """Parse a truthy/falsy env-var string ("1"/"true"/"yes"/"on" -> True)."""
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass
 class Config:
     """Single source of truth for all SIA configuration defaults."""
@@ -51,6 +61,20 @@ class Config:
     MAX_CONTEXT_FILE_SIZE: int = 10_000_000  # 10 MB
     MAX_EXECUTION_LOG_SIZE: int = 50_000_000  # 50 MB
 
+    # Verifier->feedback contract. Pass-set: a grader item whose `status` is not in
+    # this set counts as a failure when building the gold-free eval summary.
+    VERIFIER_PASS_STATUSES: tuple[str, ...] = ("CORRECT", "PASS", "correct")
+    # Cap on the number of FAILED held-out items surfaced (reference-answer-free) in
+    # the feedback prompt's curated eval summary. Diversified across status and group.
+    FEEDBACK_FAILURE_SAMPLES: int = 20
+
+    # Held-out-integrity seal — impl-agnostic OS-level backstop. While a meta/feedback
+    # agent runs, strip all permissions on the task's data/private dir so a read fails at
+    # the filesystem layer, not just via the prompt notice + claude-impl PreToolUse hook.
+    # Applied only around the sequential meta/feedback agent calls — never during grading,
+    # which legitimately reads the dir. Set SIA_PRIVATE_DIR_GUARD=0 to disable.
+    PRIVATE_DIR_GUARD: bool = True
+
     # Virtual environment packages.
     VENV_PACKAGES: ClassVar[list[str]] = [
         "anthropic",
@@ -85,6 +109,9 @@ class Config:
             "SIA_AGENT_IMPL": ("DEFAULT_AGENT_IMPL", str),
             "SIA_MAX_TURNS": ("DEFAULT_MAX_TURNS", int),
             "SIA_SANDBOX_MODE": ("SANDBOX_MODE", str),
+            "SIA_VERIFIER_PASS_STATUSES": ("VERIFIER_PASS_STATUSES", _to_str_tuple),
+            "SIA_FEEDBACK_FAILURE_SAMPLES": ("FEEDBACK_FAILURE_SAMPLES", int),
+            "SIA_PRIVATE_DIR_GUARD": ("PRIVATE_DIR_GUARD", _to_bool),
         }
         for env_var, (attr, converter) in env_map.items():
             val = os.environ.get(env_var)
