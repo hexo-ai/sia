@@ -14,6 +14,17 @@ if TYPE_CHECKING:
     from sia.providers import Provider
     from sia.run_setup import TaskFiles
 
+# Generic, task-agnostic instruction injected into the meta- and feedback-agent
+# harness-mode prompts. It tells the agent that held-out grader ground truth exists
+# in a private directory and must never be accessed — without naming any concrete
+# path, so it works for any SIA task.
+HELD_OUT_GROUND_TRUTH_NOTICE = (
+    "HELD-OUT EVALUATION INTEGRITY: The task's held-out evaluation ground truth lives in a "
+    "private directory used only by the grader. You MUST NOT read, list, glob, or otherwise "
+    "access it — improve solely from the feedback provided. Such access is blocked and would "
+    "invalidate the experiment."
+)
+
 
 def _reference_section(task_files: TaskFiles, reference_dir: str | None) -> str:
     """The reference paragraph of the meta prompt.
@@ -653,6 +664,8 @@ Here are a couple of sample task descriptions which the target agent has to solv
 Here is a sample agent execution trajectory:
 {json.dumps(task_files.sample_agent_execution, indent=2)}
 
+{HELD_OUT_GROUND_TRUTH_NOTICE}
+
 CRITICAL RULES - FOLLOW EXACTLY:
 
 1. The current working directory is {working_dir}. Create the target_agent.py in the current working directory itself.
@@ -942,6 +955,7 @@ Follow these steps:
 - Consider error handling, logging mechanisms, and robustness
 - Build upon successful patterns from previous generations (check context.md)
 - If execution log shows errors or is incomplete, suggest improvements to ensure proper logging
+- {HELD_OUT_GROUND_TRUTH_NOTICE}
 
 NOTE: The agent execution log may be incomplete or contain errors if the target agent crashed. If you see an "error" field, focus on making the agent more robust to prevent such failures.
 """

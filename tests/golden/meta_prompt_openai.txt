@@ -40,6 +40,8 @@ Here is a sample agent execution trajectory:
   ]
 }
 
+HELD-OUT EVALUATION INTEGRITY: The task's held-out evaluation ground truth lives in a private directory used only by the grader. You MUST NOT read, list, glob, or otherwise access it — improve solely from the feedback provided. Such access is blocked and would invalidate the experiment.
+
 CRITICAL RULES - FOLLOW EXACTLY:
 
 1. The current working directory is /WORK/run_1/gen_1. Create the target_agent.py in the current working directory itself.
