@@ -50,14 +50,21 @@ class Names:
     SHARED_DIR = "_shared"
 
 
+def _venv_bin_dir(venv_dir: str) -> str:
+    """Directory holding a venv's executables: ``Scripts`` on Windows, ``bin`` elsewhere."""
+    return os.path.join(venv_dir, "Scripts" if os.name == "nt" else "bin")
+
+
 def venv_python_path(venv_dir: str) -> str:
-    """Path to the python executable inside a venv."""
-    return os.path.join(venv_dir, "bin", "python")
+    """Path to the python executable inside a venv (``.exe`` on Windows)."""
+    exe = "python.exe" if os.name == "nt" else "python"
+    return os.path.join(_venv_bin_dir(venv_dir), exe)
 
 
 def venv_pip_path(venv_dir: str) -> str:
-    """Path to the pip executable inside a venv."""
-    return os.path.join(venv_dir, "bin", "pip")
+    """Path to the pip executable inside a venv (``.exe`` on Windows)."""
+    exe = "pip.exe" if os.name == "nt" else "pip"
+    return os.path.join(_venv_bin_dir(venv_dir), exe)
 
 
 def find_evaluate_script(task_dir: str) -> str | None:
