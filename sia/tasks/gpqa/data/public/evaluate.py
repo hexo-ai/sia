@@ -68,8 +68,7 @@ def find_submission_file(gen_dir: Path) -> Optional[Path]:
 
     Search order:
     1. Check for results/ subdirectory and look for JSON files there
-    2. Look for common patterns in gen_dir itself (results*.json, submission*.json, etc.)
-    3. If only one JSON file exists, use that
+    2. Look for explicit submission patterns in gen_dir itself
     """
     if not gen_dir.is_dir():
         return None
@@ -82,21 +81,13 @@ def find_submission_file(gen_dir: Path) -> Optional[Path]:
             # Return the most recently modified file from results/
             return max(json_files, key=lambda p: p.stat().st_mtime)
 
-    # Try common patterns in gen_dir itself
-    patterns = ["results*.json", "submission*.json", "output*.json"]
+    # Try explicit submission patterns in gen_dir itself.
+    patterns = ["submission*.json", "output*.json"]
     for pattern in patterns:
         matches = list(gen_dir.glob(pattern))
         if matches:
             # Return the most recently modified file
             return max(matches, key=lambda p: p.stat().st_mtime)
-
-    # If no pattern matches, look for any JSON file
-    json_files = list(gen_dir.glob("*.json"))
-    if len(json_files) == 1:
-        return json_files[0]
-    elif len(json_files) > 1:
-        # Return the most recently modified
-        return max(json_files, key=lambda p: p.stat().st_mtime)
 
     return None
 

@@ -34,3 +34,25 @@ def test_default_gen_dir_output_is_results_json(monkeypatch, tmp_path):
 
     assert (gen_dir / "results.json").is_file()
     assert not (gen_dir / "evaluation_results.json").exists()
+
+
+def test_find_submission_file_ignores_root_results_json(tmp_path):
+    evaluator = _load_gpqa_evaluator()
+    gen_dir = tmp_path / "gen_1"
+    gen_dir.mkdir()
+    results_path = gen_dir / "results.json"
+    results_path.write_text('{"accuracy": 1.0}', encoding="utf-8")
+    submission_path = gen_dir / "submission.json"
+    submission_path.write_text('{"answers": {"1": "A"}}', encoding="utf-8")
+
+    assert evaluator.find_submission_file(gen_dir) == submission_path
+
+
+def test_find_submission_file_does_not_guess_arbitrary_json(tmp_path):
+    evaluator = _load_gpqa_evaluator()
+    gen_dir = tmp_path / "gen_1"
+    gen_dir.mkdir()
+    (gen_dir / "answers.json").write_text('{"1": "A"}', encoding="utf-8")
+    (gen_dir / "results.json").write_text('{"accuracy": 1.0}', encoding="utf-8")
+
+    assert evaluator.find_submission_file(gen_dir) is None
