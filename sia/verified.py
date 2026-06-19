@@ -64,3 +64,27 @@ def score_val(cand_dir: str, oracle_val_csv: str, label_col: str,
     if not common:
         return None
     return sum(g[k] == p[k] for k in common) / len(common)
+
+
+@dataclass
+class Candidate:
+    gen: int
+    k: int
+    val: float | None
+    target_path: str
+    submission_path: str
+
+
+def update_incumbent(incumbent: Candidate | None,
+                     candidate: Candidate | None) -> Candidate | None:
+    """Accept candidate as the new incumbent only on strict val improvement.
+
+    None-scored candidates (failed/unusable) never replace the incumbent. Ties keep
+    the earlier incumbent (avoids pointless churn). Guarantees a monotonic
+    non-decreasing incumbent val across a run.
+    """
+    if candidate is None or candidate.val is None:
+        return incumbent
+    if incumbent is None or incumbent.val is None:
+        return candidate
+    return candidate if candidate.val > incumbent.val else incumbent

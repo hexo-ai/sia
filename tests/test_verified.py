@@ -80,3 +80,20 @@ def test_score_val_missing_returns_none(tmp_path):
     cand = tmp_path / "cand_2"; cand.mkdir()  # no val_predictions.csv
     assert verified.score_val(str(cand), str(oracle / "val.csv"),
                               label_col="Transported", id_col="PassengerId") is None
+
+
+def test_update_incumbent_monotonic():
+    inc = None
+    path = []
+    for gen, score in [(1, 0.80), (2, 0.74), (3, 0.82)]:
+        cand = verified.Candidate(gen=gen, k=0, val=score,
+                                  target_path=f"g{gen}", submission_path=f"s{gen}")
+        inc = verified.update_incumbent(inc, cand)
+        path.append(inc.val)
+    assert path == [0.80, 0.80, 0.82]   # never decreases; tie/worse keeps incumbent
+
+
+def test_update_incumbent_ignores_none():
+    inc = verified.Candidate(gen=1, k=0, val=0.5, target_path="g1", submission_path="s1")
+    nxt = verified.Candidate(gen=2, k=0, val=None, target_path="g2", submission_path="s2")
+    assert verified.update_incumbent(inc, nxt) is inc
