@@ -422,6 +422,40 @@ def _run_target_agent(
         return TargetAgentResult(False, stdout, "", error_msg).as_tuple()
 
 
+def _produce_meta_candidate(cand_dir, task_files, task_model, meta_model, agent_impl,
+                            meta_profile, target_provider, env_config, focus, cand_k):
+    """Generation-1 production: write one meta-agent candidate target into cand_dir.
+
+    Mirrors SECTION 4 but targets cand_dir and varies sampling per candidate via a
+    one-line nonce so the N candidates differ. Returns the target_agent.py path.
+    """
+    prompt = build_meta_prompt(
+        task_files, task_model, cand_dir, provider=target_provider, focus=focus,
+    ) + f"\n# candidate {cand_k}\n"
+    write_text(os.path.join(cand_dir, Names.META_PROMPT), prompt)
+    asyncio.run(run_agent(
+        model_name=meta_model, max_turns=str(env_config.DEFAULT_MAX_TURNS),
+        prompt=prompt, agent_working_directory=cand_dir, agent_impl=agent_impl,
+        provider=meta_profile.provider,
+    ))
+    return os.path.join(cand_dir, Names.TARGET_AGENT)
+
+
+def _run_candidate_target(cand_dir, abs_dataset_dir, run_setup, env_config, sandbox):
+    """Execute cand_dir/target_agent.py via the existing target-run primitive,
+    writing submission.csv + val_predictions.csv into cand_dir. Raises on failure so
+    run_verified_generation records a None-scored (failed) candidate."""
+    target_path = os.path.join(cand_dir, Names.TARGET_AGENT)
+    stdout_log = os.path.join(cand_dir, Names.STDOUT_LOG)
+    success, _stdout, _stderr, err = _run_target_agent(
+        venv_dir=run_setup.venv_dir, target_agent_path=target_path,
+        abs_dataset_dir=abs_dataset_dir, gen_dir=cand_dir,
+        stdout_log_file=stdout_log, sandbox=sandbox, env_config=env_config,
+    )
+    if not success:
+        raise RuntimeError(err or "target agent failed")
+
+
 def _build_feedback_context(
     current_gen: int,
     gen_dir: str,
@@ -866,6 +900,9 @@ def main():
         target_profile=target_profile,
     )
 
+    oracle_val = os.path.join(run_setup.run_directory, "_oracle", "val.csv")
+    use_verified = env_config.BEST_OF_N > 1 and os.path.isfile(oracle_val)
+
     # ========================
     # SECTION 3: Build Initial Prompt
     # ========================
@@ -901,16 +938,17 @@ def main():
     write_text(meta_agent_prompt_path, meta_agent_prompt)
     logger.info(f"  ✓ Saved meta-agent prompt to: {meta_agent_prompt_path}")
 
-    asyncio.run(
-        run_agent(
-            model_name=meta_model,
-            max_turns=str(env_config.DEFAULT_MAX_TURNS),
-            prompt=meta_agent_prompt,
-            agent_working_directory=run_setup.meta_agent_working_directory,
-            agent_impl=agent_impl,
-            provider=meta_profile.provider,
+    if not use_verified:
+        asyncio.run(
+            run_agent(
+                model_name=meta_model,
+                max_turns=str(env_config.DEFAULT_MAX_TURNS),
+                prompt=meta_agent_prompt,
+                agent_working_directory=run_setup.meta_agent_working_directory,
+                agent_impl=agent_impl,
+                provider=meta_profile.provider,
+            )
         )
-    )
 
     # ========================
     # SECTION 5: Main Loop - Run Target Agent and Feedback Agent
@@ -920,35 +958,70 @@ def main():
     abs_dataset_directory = task_layout.abs_dataset_dir
     logger.info(f"Dataset directory: {abs_dataset_directory}")
 
-    for current_gen in range(1, max_gen + 1):
-        logger.info("=" * 80)
-        logger.info(f"Starting Generation {current_gen} of {max_gen}")
-        logger.info("=" * 80)
+    if use_verified:
+        from sia.verified import run_verified_generation, update_incumbent
+        # Verified path: best-of-N at generation 1, execution-gated, keep-best.
+        # (Multi-generation refinement under the gate is future work.)
+        logger.info("Verified-SIA: best-of-%s at generation 1 (triage=%s, early-stop=%.2f)",
+                    env_config.BEST_OF_N, env_config.TRIAGE_MODE, env_config.EARLY_STOP_THRESHOLD)
+        gen_root = RunLayout(run_setup.run_directory).gen_dir(1)
 
-        run_generation(
-            current_gen=current_gen,
-            max_gen=max_gen,
-            run_setup=run_setup,
-            task_files=task_files,
-            abs_dataset_dir=abs_dataset_directory,
-            dataset_dir=dataset_directory,
-            meta_profile=meta_profile,
-            sandbox=args.sandbox,
-            env_config=env_config,
-            task_model=task_model,
-            target_provider=target_provider,
-            focus=args.focus,
-            training_sandbox=args.training_sandbox,
-            resolved_ref=resolved_ref,
-        )
+        def produce_target(gen, k, cand_dir):
+            return _produce_meta_candidate(
+                cand_dir, task_files, task_model, meta_model, agent_impl,
+                meta_profile, target_provider, env_config, args.focus, k)
 
-        # Early stopping for weights mode: if feedback agent signaled completion
-        if args.focus == "weights" and current_gen < max_gen:
-            next_gen = current_gen + 1
-            next_gen_dir = RunLayout(run_setup.run_directory).gen_dir(next_gen)
-            if os.path.exists(os.path.join(next_gen_dir, "COMPLETED")):
-                logger.info("Feedback agent signaled completion via COMPLETED file. Exiting evolution loop early.")
-                break
+        def run_target(cand_dir, k):
+            _run_candidate_target(cand_dir, abs_dataset_directory, run_setup,
+                                  env_config, args.sandbox)
+
+        result = run_verified_generation(
+            gen=1, n=env_config.BEST_OF_N, cand_root=gen_root,
+            oracle_val_csv=oracle_val, produce_target=produce_target,
+            run_target=run_target, label_col="Transported", id_col="PassengerId",
+            early_stop_threshold=env_config.EARLY_STOP_THRESHOLD,
+            triage_mode=env_config.TRIAGE_MODE)
+        incumbent = update_incumbent(None, result.best)
+        for c in result.candidates:
+            logger.info("  cand %s: val=%s", c.k, c.val)
+        if incumbent is not None:
+            import shutil
+            shutil.copyfile(incumbent.submission_path,
+                            os.path.join(run_setup.run_directory, "submission.csv"))
+            logger.info("Verified deliverable: incumbent val=%.4f from %s",
+                        incumbent.val, incumbent.target_path)
+        else:
+            logger.warning("Verified-SIA: no competitive solution produced (no incumbent).")
+    else:
+        for current_gen in range(1, max_gen + 1):
+            logger.info("=" * 80)
+            logger.info(f"Starting Generation {current_gen} of {max_gen}")
+            logger.info("=" * 80)
+
+            run_generation(
+                current_gen=current_gen,
+                max_gen=max_gen,
+                run_setup=run_setup,
+                task_files=task_files,
+                abs_dataset_dir=abs_dataset_directory,
+                dataset_dir=dataset_directory,
+                meta_profile=meta_profile,
+                sandbox=args.sandbox,
+                env_config=env_config,
+                task_model=task_model,
+                target_provider=target_provider,
+                focus=args.focus,
+                training_sandbox=args.training_sandbox,
+                resolved_ref=resolved_ref,
+            )
+
+            # Early stopping for weights mode: if feedback agent signaled completion
+            if args.focus == "weights" and current_gen < max_gen:
+                next_gen = current_gen + 1
+                next_gen_dir = RunLayout(run_setup.run_directory).gen_dir(next_gen)
+                if os.path.exists(os.path.join(next_gen_dir, "COMPLETED")):
+                    logger.info("Feedback agent signaled completion via COMPLETED file. Exiting evolution loop early.")
+                    break
 
     # Finalize context with summary statistics
     logger.info("Finalizing context.md with summary statistics...")

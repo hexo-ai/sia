@@ -182,6 +182,24 @@ def setup_run_directory(
 
     _write_run_profiles(run_directory, meta_profile, target_profile)
 
+    # Verified-SIA: build a self-held-out validation split from labeled training data.
+    if cfg.BEST_OF_N > 1:
+        from sia.verified import make_val_split
+        train_csv = os.path.join(task_dir, "data", "public", "train.csv")
+        if os.path.isfile(train_csv):
+            oracle_dir = os.path.join(run_directory, "_oracle")
+            try:
+                info = make_val_split(
+                    train_csv=train_csv,
+                    agent_data_dir=os.path.join(task_dir, "data", "public"),
+                    oracle_dir=oracle_dir, label_col="Transported",
+                    id_col="PassengerId", frac=cfg.VAL_FRACTION,
+                )
+                logger.info("Verified-SIA val split: %s inner / %s val",
+                            info["n_inner"], info["n_val"])
+            except Exception as exc:
+                logger.warning("Verified-SIA val split skipped: %s", exc)
+
     logger.info("Initializing context manager...")
     context_mgr = ContextManager(
         run_directory,

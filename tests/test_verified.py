@@ -237,3 +237,48 @@ def test_prompt_requires_val_predictions(monkeypatch):
     assert "val_predictions.csv" in block
     assert "val_features.csv" in block
     assert "train_inner.csv" in block
+
+
+import subprocess, sys, textwrap
+
+
+def test_end_to_end_subprocess_target(tmp_path):
+    # dataset dir the "agent" reads
+    data = tmp_path / "data"; data.mkdir()
+    pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                  "Feat": [0, 1, 0, 1]}).to_csv(data / "val_features.csv", index=False)
+    oracle_val = _mock_oracle(tmp_path)
+    cand_root = tmp_path / "gen_1"; cand_root.mkdir()
+
+    # A real, plain-script target: copies the rule "Feat==0 -> True" (3/4 correct here:
+    # a=0->T(ok), b=1->F(ok? gold b=True -> wrong), c=0->T(gold False -> wrong), d=1->F(gold False ok))
+    target_src = textwrap.dedent('''
+        import argparse, pandas as pd
+        p = argparse.ArgumentParser(); p.add_argument("--dataset_dir"); p.add_argument("--working_dir")
+        a = p.parse_args()
+        vf = pd.read_csv(a.dataset_dir + "/val_features.csv")
+        vf["Transported"] = (vf["Feat"] == 0)
+        vf[["PassengerId", "Transported"]].to_csv(a.working_dir + "/val_predictions.csv", index=False)
+        vf[["PassengerId", "Transported"]].to_csv(a.working_dir + "/submission.csv", index=False)
+    ''')
+
+    def produce_target(gen, k, cand_dir):
+        path = os.path.join(cand_dir, "target_agent.py")
+        with open(path, "w") as fh:
+            fh.write(target_src)
+        return path
+
+    def run_target(cand_dir, k):
+        subprocess.run([sys.executable, os.path.join(cand_dir, "target_agent.py"),
+                        "--dataset_dir", str(data), "--working_dir", cand_dir],
+                       check=True, capture_output=True, timeout=60)
+
+    result = verified.run_verified_generation(
+        gen=1, n=1, cand_root=str(cand_root), oracle_val_csv=oracle_val,
+        produce_target=produce_target, run_target=run_target,
+        label_col="Transported", id_col="PassengerId",
+        early_stop_threshold=0.99, triage_mode="lint",
+    )
+    assert result.best is not None
+    assert result.best.val == 0.5    # 2/4 correct given the gold above
+    assert os.path.isfile(os.path.join(cand_root, "cand_0", "submission.csv"))
