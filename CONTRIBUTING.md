@@ -2,6 +2,15 @@
 
 Thank you for your interest in contributing to SIA (Self-Improving AI). This document provides guidelines for contributing to the project.
 
+## Before You Start
+
+For small documentation fixes, typo fixes, and clearly scoped bug fixes, feel free to open a pull request directly.
+
+For larger changes, new features, new tasks, or behavior changes, please open an issue first so maintainers can discuss the approach before you invest significant time.
+
+Documentation contributions are welcome. Useful documentation changes include clarifying setup or usage instructions, improving examples, adding troubleshooting notes for common errors, correcting stale links or commands, and clarifying task authoring or evaluation behavior.
+
+
 ## How to Contribute
 
 ### Reporting Bugs
@@ -25,11 +34,11 @@ Have an idea for a new feature or improvement? [Open an issue](https://github.co
 ### Submitting Changes
 
 1. Fork the repository
-2. Create a branch from `master` (`git checkout -b my-change`)
+2. Create a branch from `main` (`git checkout -b my-change`)
 3. Make your changes
 4. Run the checks (see below)
 5. Commit with a clear message describing the change
-6. Push to your fork and open a pull request against `master`
+6. Push to your fork and open a pull request against `main`
 
 ## Development Setup
 
@@ -70,6 +79,17 @@ To auto-fix lint and formatting issues:
 ruff check --fix sia/ tests/
 ruff format sia/ tests/
 ```
+
+## Security-Sensitive Changes
+
+SIA can execute agent-generated code. Changes to sandboxing, subprocess execution, environment-variable handling, task data access, or agent permissions should be treated as security-sensitive.
+
+For these changes:
+
+- Read [SECURITY.md](SECURITY.md) before starting.
+- Prefer safer defaults for untrusted tasks and models.
+- Do not log API keys, environment variables, private task data, or generated secrets.
+- Explain the security impact in your pull request.
 
 ## Adding a New Task
 
