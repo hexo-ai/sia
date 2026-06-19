@@ -1,0 +1,7 @@
+{
+  "profile_id": "ollama-target",
+  "name": "Ollama target agent (qwen3-coder:30b)",
+  "model": "qwen3-coder:30b",
+  "provider_id": "ollama",
+  "agent_reference": "default"
+}

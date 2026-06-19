@@ -1,0 +1,7 @@
+{
+  "profile_id": "ollama-meta",
+  "name": "Ollama meta agent (pydantic-ai, qwen3-coder:30b)",
+  "agent_impl": "pydantic-ai",
+  "model": "qwen3-coder:30b",
+  "provider_id": "ollama"
+}

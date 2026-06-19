@@ -44,6 +44,10 @@ class ContextManager:
         self.generations = []
         self.meta_model = run_config.get("meta_model", self.cfg.DEFAULT_CLAUDE_META_MODEL)
         self.agent_impl = run_config.get("agent_impl", self.cfg.DEFAULT_AGENT_IMPL)
+        # Provider for the meta model, needed so the LLM-summary path can resolve
+        # OpenAI-compatible endpoints (e.g. Ollama) instead of misparsing the model
+        # string "name:tag" as "provider:model".
+        self.meta_provider = run_config.get("meta_provider")
 
     def initialize(self):
         """Create context.md with header information"""
@@ -158,6 +162,7 @@ class ContextManager:
                         prompt=file_prompt,
                         agent_working_directory=temp_dir,
                         agent_impl=self.agent_impl,
+                        provider=self.meta_provider,
                     )
 
                     # Read the summary from file

@@ -1,0 +1,7 @@
+{
+  "provider_id": "ollama",
+  "name": "Ollama (local, OpenAI-compatible)",
+  "client_kind": "openai",
+  "base_url": "http://localhost:11434/v1",
+  "api_key_env": "OLLAMA_API_KEY"
+}

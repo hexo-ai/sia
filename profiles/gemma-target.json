@@ -1,0 +1,1 @@
+{"profile_id":"gemma-target","name":"Gemma4 target (Ollama)","model":"gemma4:latest","provider_id":"ollama","agent_reference":"default"}

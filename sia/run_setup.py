@@ -188,6 +188,7 @@ def setup_run_directory(
         {
             "task_dir": task_dir,
             "meta_model": meta_model,
+            "meta_provider": meta_profile.provider if meta_profile else None,
             "task_model": task_model,
             "agent_impl": agent_impl,
             "max_gen": max_gen,

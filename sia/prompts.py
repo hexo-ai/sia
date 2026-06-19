@@ -716,8 +716,36 @@ def build_target_client_setup(provider: Provider, task_model: str) -> str:
     The reference target_agent.py shown later in the prompt may use a different SDK
     (e.g. the Gemini SDK); this block instructs the meta-agent to refactor it to the
     ``openai`` SDK configured for ``provider``.
+
+    The "local endpoint adaptation" preamble (prefer a direct executable script over a
+    nested LLM-agent) is gated on env ``SIA_LOCAL_ADAPT`` (default "1"); set it to "0"
+    to reproduce the unadapted SIA default for an A/B comparison.
     """
-    return f"""=== TARGET MODEL CLIENT SETUP (OpenAI-compatible provider: {provider.name}) ===
+    adapt = os.environ.get("SIA_LOCAL_ADAPT", "1") != "0"
+    adaptation_block = """=== LOCAL ENDPOINT ADAPTATION (CRITICAL — READ FIRST) ===
+
+The target model is served by a LOCAL OpenAI-compatible server (e.g. Ollama) whose
+message validation is STRICTER than the hosted OpenAI API. Two rules override the
+reference design:
+
+1. PREFER A DIRECT, SELF-CONTAINED SCRIPT. If the task can be solved
+   deterministically with code (e.g. a data-science / ML task: read CSV(s), train a
+   model, write a predictions/submission file), write target_agent.py as a PLAIN
+   Python program using pandas / numpy / scikit-learn that solves the task DIRECTLY
+   and writes the required output file. In that case do NOT build a nested LLM-agent,
+   do NOT call chat.completions at all, and do NOT have the script "decide" via the
+   model — just compute the answer. This is the most reliable path on a local
+   endpoint and avoids message-format failures entirely.
+
+2. IF (and only if) the task genuinely requires calling the model, every tool/function
+   result you send back MUST have its `content` field as a PLAIN STRING (e.g.
+   json.dumps(result)), never a dict/list/object. The local server returns HTTP 400
+   ("invalid message content type") if tool-result content is a structured object.
+   Also: never claim success in prose without actually executing code and writing the
+   output file.
+
+"""
+    client_setup = f"""=== TARGET MODEL CLIENT SETUP (OpenAI-compatible provider: {provider.name}) ===
 
 The target model "{task_model}" is served by an OpenAI-compatible API. The reference
 target_agent.py shown below may use a different SDK (e.g. the Gemini SDK) — you MUST
@@ -738,6 +766,7 @@ structured output). Do NOT compute a dollar cost: per-provider pricing is unknow
 set any cost field to 0 (token counts from the API response are still fine to record).
 
 """
+    return (adaptation_block if adapt else "") + client_setup
 
 
 def build_feedback_prompt(

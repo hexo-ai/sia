@@ -1,0 +1,1 @@
+{"profile_id":"gemma-meta","name":"Gemma4 meta (Ollama)","agent_impl":"pydantic-ai","model":"gemma4:latest","provider_id":"ollama"}
