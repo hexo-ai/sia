@@ -59,3 +59,24 @@ def test_make_val_split(tmp_path):
     assert set(val_feat["PassengerId"]) == set(val_lab["PassengerId"])
     assert set(inner["PassengerId"]).isdisjoint(set(val_feat["PassengerId"]))
     assert info["n_val"] == 20 and info["n_inner"] == 80
+
+
+def test_score_val_exact(tmp_path):
+    oracle = tmp_path / "_oracle"; oracle.mkdir()
+    pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                  "Transported": [True, True, False, False]}).to_csv(oracle / "val.csv", index=False)
+    cand = tmp_path / "cand_1"; cand.mkdir()
+    # 3/4 correct (last one wrong)
+    pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                  "Transported": [True, True, False, True]}).to_csv(cand / "val_predictions.csv", index=False)
+    acc = verified.score_val(str(cand), str(oracle / "val.csv"),
+                             label_col="Transported", id_col="PassengerId")
+    assert acc == 0.75
+
+
+def test_score_val_missing_returns_none(tmp_path):
+    oracle = tmp_path / "_oracle"; oracle.mkdir()
+    pd.DataFrame({"PassengerId": ["a"], "Transported": [True]}).to_csv(oracle / "val.csv", index=False)
+    cand = tmp_path / "cand_2"; cand.mkdir()  # no val_predictions.csv
+    assert verified.score_val(str(cand), str(oracle / "val.csv"),
+                              label_col="Transported", id_col="PassengerId") is None
