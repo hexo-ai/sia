@@ -122,3 +122,59 @@ def select_best(candidates: list[Candidate]) -> Candidate | None:
     if not scored:
         return None
     return max(scored, key=lambda c: c.val)
+
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class GenerationResult:
+    gen: int
+    candidates: list[Candidate]
+    best: Candidate | None
+
+
+def run_verified_generation(gen, n, cand_root, oracle_val_csv,
+                            produce_target, run_target, label_col, id_col,
+                            early_stop_threshold, triage_mode="lint"):
+    """Sample up to n candidates for one generation, score each on the val oracle,
+    early-stop on threshold, and select the best.
+
+    produce_target(gen, k, cand_dir) -> target_path   (writes the candidate)
+    run_target(cand_dir, k) -> None                   (executes it; writes outputs)
+
+    Any exception from produce/run, or a missing val file, yields a None-scored
+    candidate (never raises). triage_mode: "lint" rejects known-fatal targets before
+    execution; "off" disables; "judge" is reserved (falls back to lint).
+    """
+    candidates: list[Candidate] = []
+    for k in range(n):
+        cand_dir = os.path.join(cand_root, f"cand_{k}")
+        os.makedirs(cand_dir, exist_ok=True)
+        sub = os.path.join(cand_dir, "submission.csv")
+        try:
+            target_path = produce_target(gen, k, cand_dir)
+        except Exception as exc:                       # production failure -> skip
+            logger.warning("gen %s cand %s: produce failed: %s", gen, k, exc)
+            candidates.append(Candidate(gen, k, None, "", sub))
+            continue
+        if triage_mode != "off":
+            issues = lint_target(target_path)
+            if issues:
+                logger.info("gen %s cand %s: triage rejected: %s", gen, k, "; ".join(issues))
+                candidates.append(Candidate(gen, k, None, target_path, sub))
+                continue
+        try:
+            run_target(cand_dir, k)
+        except Exception as exc:                       # execution failure -> skip
+            logger.warning("gen %s cand %s: run failed: %s", gen, k, exc)
+            candidates.append(Candidate(gen, k, None, target_path, sub))
+            continue
+        val = score_val(cand_dir, oracle_val_csv, label_col=label_col, id_col=id_col)
+        candidates.append(Candidate(gen, k, val, target_path, sub))
+        if val is not None and val >= early_stop_threshold:
+            logger.info("gen %s cand %s: early-stop at val=%.4f", gen, k, val)
+            break
+    return GenerationResult(gen=gen, candidates=candidates, best=select_best(candidates))

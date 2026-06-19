@@ -150,3 +150,73 @@ def test_select_best_argmax():
 def test_select_best_all_failed_returns_none():
     cands = [verified.Candidate(1, 0, None, "g1c0", "s0")]
     assert verified.select_best(cands) is None
+
+
+def _mock_oracle(tmp_path):
+    oracle = tmp_path / "_oracle"; oracle.mkdir()
+    pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                  "Transported": [True, True, False, False]}).to_csv(oracle / "val.csv", index=False)
+    return str(oracle / "val.csv")
+
+
+def test_run_verified_generation_picks_best_and_early_stops(tmp_path):
+    oracle_val = _mock_oracle(tmp_path)
+    cand_root = tmp_path / "gen_1"; cand_root.mkdir()
+
+    # produce_target writes a trivial target file (content irrelevant to the test)
+    def produce_target(gen, k, cand_dir):
+        p = os.path.join(cand_dir, "target_agent.py")
+        with open(p, "w") as fh:
+            fh.write("# mock target\nsubmission.csv val_predictions.csv\n")
+        return p
+
+    # run_target writes val_predictions of increasing accuracy per k:
+    # k0 -> 2/4=0.5, k1 -> 4/4=1.0 (should early-stop here at threshold 0.78)
+    preds_by_k = {
+        0: [True, True, True, True],     # 0.5
+        1: [True, True, False, False],   # 1.0
+        2: [False, False, False, False], # 0.5 (must NOT run: early-stopped)
+    }
+    ran = []
+    def run_target(cand_dir, k):
+        ran.append(k)
+        pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                      "Transported": preds_by_k[k]}).to_csv(
+            os.path.join(cand_dir, "val_predictions.csv"), index=False)
+        pd.DataFrame({"PassengerId": ["x"], "Transported": [True]}).to_csv(
+            os.path.join(cand_dir, "submission.csv"), index=False)
+
+    result = verified.run_verified_generation(
+        gen=1, n=3, cand_root=str(cand_root), oracle_val_csv=oracle_val,
+        produce_target=produce_target, run_target=run_target,
+        label_col="Transported", id_col="PassengerId",
+        early_stop_threshold=0.78, triage_mode="off",
+    )
+    assert result.best.k == 1 and result.best.val == 1.0
+    assert ran == [0, 1]           # early-stopped before k=2
+    assert len(result.candidates) == 2
+
+
+def test_run_verified_generation_triage_skips_execution(tmp_path):
+    oracle_val = _mock_oracle(tmp_path)
+    cand_root = tmp_path / "gen_1"; cand_root.mkdir()
+
+    def produce_target(gen, k, cand_dir):
+        p = os.path.join(cand_dir, "target_agent.py")
+        with open(p, "w") as fh:                       # nested-agent: linter rejects
+            fh.write("from openai import OpenAI\nclient.chat.completions.create()\n")
+        return p
+
+    ran = []
+    def run_target(cand_dir, k):
+        ran.append(k)
+
+    result = verified.run_verified_generation(
+        gen=1, n=2, cand_root=str(cand_root), oracle_val_csv=oracle_val,
+        produce_target=produce_target, run_target=run_target,
+        label_col="Transported", id_col="PassengerId",
+        early_stop_threshold=0.78, triage_mode="lint",
+    )
+    assert ran == []               # never executed: all linter-rejected
+    assert result.best is None
+    assert all(c.val is None for c in result.candidates)
