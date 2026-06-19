@@ -1,3 +1,36 @@
+=== LOCAL ENDPOINT ADAPTATION (CRITICAL — READ FIRST) ===
+
+The target model is served by a LOCAL OpenAI-compatible server (e.g. Ollama) whose
+message validation is STRICTER than the hosted OpenAI API. Two rules override the
+reference design:
+
+1. PREFER A DIRECT, SELF-CONTAINED SCRIPT. If the task can be solved
+   deterministically with code (e.g. a data-science / ML task: read CSV(s), train a
+   model, write a predictions/submission file), write target_agent.py as a PLAIN
+   Python program using pandas / numpy / scikit-learn that solves the task DIRECTLY
+   and writes the required output file. In that case do NOT build a nested LLM-agent,
+   do NOT call chat.completions at all, and do NOT have the script "decide" via the
+   model — just compute the answer. This is the most reliable path on a local
+   endpoint and avoids message-format failures entirely.
+
+2. IF (and only if) the task genuinely requires calling the model, every tool/function
+   result you send back MUST have its `content` field as a PLAIN STRING (e.g.
+   json.dumps(result)), never a dict/list/object. The local server returns HTTP 400
+   ("invalid message content type") if tool-result content is a structured object.
+   Also: never claim success in prose without actually executing code and writing the
+   output file.
+
+3. VALIDATION OUTPUT CONTRACT (REQUIRED). The dataset directory contains
+   `train_inner.csv` (labeled training data), `val_features.csv` (held-out rows WITHOUT
+   the label column), and the usual test input. Your target_agent.py MUST:
+   - train ONLY on `train_inner.csv` (do not peek at any other labels),
+   - write `submission.csv` for the test set as before, AND
+   - ALSO write `val_predictions.csv` to the working dir, predicting every row in
+     `val_features.csv`, in the SAME format as submission.csv (id column + the label
+     column as True/False). The harness scores `val_predictions.csv` to decide whether
+     your solution is kept; a missing or mis-formatted file means your solution is
+     discarded.
+
 === TARGET MODEL CLIENT SETUP (OpenAI-compatible provider: Nebius Token Factory) ===
 
 The target model "moonshotai/Kimi-K2.6" is served by an OpenAI-compatible API. The reference

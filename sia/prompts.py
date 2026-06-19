@@ -744,6 +744,17 @@ reference design:
    Also: never claim success in prose without actually executing code and writing the
    output file.
 
+3. VALIDATION OUTPUT CONTRACT (REQUIRED). The dataset directory contains
+   `train_inner.csv` (labeled training data), `val_features.csv` (held-out rows WITHOUT
+   the label column), and the usual test input. Your target_agent.py MUST:
+   - train ONLY on `train_inner.csv` (do not peek at any other labels),
+   - write `submission.csv` for the test set as before, AND
+   - ALSO write `val_predictions.csv` to the working dir, predicting every row in
+     `val_features.csv`, in the SAME format as submission.csv (id column + the label
+     column as True/False). The harness scores `val_predictions.csv` to decide whether
+     your solution is kept; a missing or mis-formatted file means your solution is
+     discarded.
+
 """
     client_setup = f"""=== TARGET MODEL CLIENT SETUP (OpenAI-compatible provider: {provider.name}) ===
 

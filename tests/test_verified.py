@@ -220,3 +220,20 @@ def test_run_verified_generation_triage_skips_execution(tmp_path):
     assert ran == []               # never executed: all linter-rejected
     assert result.best is None
     assert all(c.val is None for c in result.candidates)
+
+
+from sia.prompts import build_target_client_setup
+from sia.providers import Provider
+
+
+def _ollama_provider():
+    return Provider(provider_id="ollama", name="Ollama", client_kind="openai",
+                    base_url="http://localhost:11434/v1", api_key_env="OLLAMA_API_KEY")
+
+
+def test_prompt_requires_val_predictions(monkeypatch):
+    monkeypatch.setenv("SIA_LOCAL_ADAPT", "1")
+    block = build_target_client_setup(_ollama_provider(), "qwen3-coder:30b")
+    assert "val_predictions.csv" in block
+    assert "val_features.csv" in block
+    assert "train_inner.csv" in block
