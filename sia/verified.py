@@ -114,3 +114,11 @@ def lint_target(target_path: str) -> list[str]:
     if re.search(r"Transported.{0,40}astype\(int\)", src, re.S):
         issues.append("label written as int (astype(int)); Transported must be True/False")
     return issues
+
+
+def select_best(candidates: list[Candidate]) -> Candidate | None:
+    """Return the candidate with the highest val score; None if all failed."""
+    scored = [c for c in candidates if c.val is not None]
+    if not scored:
+        return None
+    return max(scored, key=lambda c: c.val)

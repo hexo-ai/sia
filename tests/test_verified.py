@@ -135,3 +135,18 @@ def test_lint_flags_nested_agent(tmp_path):
 def test_lint_flags_int_labels(tmp_path):
     f = tmp_path / "t.py"; f.write_text(LABEL01)
     assert any("astype(int)" in i or "label" in i for i in verified.lint_target(str(f)))
+
+
+def test_select_best_argmax():
+    cands = [
+        verified.Candidate(1, 0, 0.70, "g1c0", "s0"),
+        verified.Candidate(1, 1, None, "g1c1", "s1"),
+        verified.Candidate(1, 2, 0.81, "g1c2", "s2"),
+    ]
+    best = verified.select_best(cands)
+    assert best.k == 2 and best.val == 0.81
+
+
+def test_select_best_all_failed_returns_none():
+    cands = [verified.Candidate(1, 0, None, "g1c0", "s0")]
+    assert verified.select_best(cands) is None
