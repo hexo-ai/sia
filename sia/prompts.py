@@ -754,6 +754,15 @@ reference design:
      column as True/False). The harness scores `val_predictions.csv` to decide whether
      your solution is kept; a missing or mis-formatted file means your solution is
      discarded.
+   CORRECTNESS REQUIREMENTS (common failure modes — follow exactly):
+   - The label column MUST be Python booleans True/False, NOT 0/1 and NOT strings.
+     If your model outputs 0/1, convert with `.astype(bool)` before writing.
+   - Apply the EXACT SAME preprocessing / feature engineering to the test rows AND the
+     `val_features.csv` rows as you applied to `train_inner.csv`. Build features with a
+     single function (or sklearn Pipeline / ColumnTransformer fit on train, then
+     `.transform` on test and val) so the columns always match — a column present at
+     training time but missing at prediction time will raise KeyError and discard your
+     solution.
 
 """
     client_setup = f"""=== TARGET MODEL CLIENT SETUP (OpenAI-compatible provider: {provider.name}) ===
