@@ -97,3 +97,41 @@ def test_update_incumbent_ignores_none():
     inc = verified.Candidate(gen=1, k=0, val=0.5, target_path="g1", submission_path="s1")
     nxt = verified.Candidate(gen=2, k=0, val=None, target_path="g2", submission_path="s2")
     assert verified.update_incumbent(inc, nxt) is inc
+
+
+PLAIN = '''import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+df = pd.read_csv(args.dataset_dir + "/train_inner.csv")
+m = RandomForestClassifier().fit(X, y)
+out = pd.DataFrame({"PassengerId": ids, "Transported": preds.astype(bool)})
+out.to_csv(working_dir + "/submission.csv", index=False)
+out.to_csv(working_dir + "/val_predictions.csv", index=False)
+'''
+
+NESTED = '''from openai import OpenAI
+client = OpenAI(base_url="http://localhost:11434/v1")
+resp = client.chat.completions.create(model="m", messages=msgs)
+# decides everything via the model, writes submission.csv eventually
+'''
+
+LABEL01 = '''import pandas as pd
+out = pd.DataFrame({"PassengerId": ids, "Transported": preds.astype(int)})
+out.to_csv("submission.csv"); out.to_csv("val_predictions.csv")
+'''
+
+
+def test_lint_passes_plain(tmp_path):
+    f = tmp_path / "t.py"; f.write_text(PLAIN)
+    assert verified.lint_target(str(f)) == []
+
+
+def test_lint_flags_nested_agent(tmp_path):
+    f = tmp_path / "t.py"; f.write_text(NESTED)
+    issues = verified.lint_target(str(f))
+    assert any("nested" in i for i in issues)
+    assert any("val_predictions" in i for i in issues)  # also missing val output
+
+
+def test_lint_flags_int_labels(tmp_path):
+    f = tmp_path / "t.py"; f.write_text(LABEL01)
+    assert any("astype(int)" in i or "label" in i for i in verified.lint_target(str(f)))

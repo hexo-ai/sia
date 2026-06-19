@@ -88,3 +88,29 @@ def update_incumbent(incumbent: Candidate | None,
     if incumbent is None or incumbent.val is None:
         return candidate
     return candidate if candidate.val > incumbent.val else incumbent
+
+
+def lint_target(target_path: str) -> list[str]:
+    """Flag known-fatal patterns in a generated target before executing it.
+
+    Advisory only: execution + score_val remain the final arbiter. Returns a list of
+    human-readable issue strings (empty == passes).
+    """
+    try:
+        with open(target_path, "r", encoding="utf-8", errors="ignore") as fh:
+            src = fh.read()
+    except OSError:
+        return ["unreadable target file"]
+    issues: list[str] = []
+    uses_chat = "chat.completions" in src
+    imports_openai = re.search(r"\bfrom openai import\b|\bimport openai\b", src) is not None
+    if uses_chat and imports_openai:
+        issues.append("nested LLM-agent: calls chat.completions to decide (fails on "
+                      "local endpoint); emit a plain executable script instead")
+    if "submission.csv" not in src:
+        issues.append("does not write submission.csv")
+    if "val_predictions.csv" not in src:
+        issues.append("does not write val_predictions.csv (required for the val oracle)")
+    if re.search(r"Transported.{0,40}astype\(int\)", src, re.S):
+        issues.append("label written as int (astype(int)); Transported must be True/False")
+    return issues
