@@ -40,6 +40,12 @@ class Config:
     SHELL_TIMEOUT: int = 30
     EVAL_TIMEOUT: int = 600
 
+    # ---- Verified-SIA (best-of-N, execution-gated, keep-best) ----
+    BEST_OF_N: int = 4
+    EARLY_STOP_THRESHOLD: float = 0.78
+    VAL_FRACTION: float = 0.2
+    TRIAGE_MODE: str = "lint"  # "lint" | "off" | "judge"
+
     # Sandbox settings
     SANDBOX_MODE: str = "none"  # "none" or "docker"
     DOCKER_IMAGE: str = "python:3.11-slim"
@@ -85,6 +91,10 @@ class Config:
             "SIA_AGENT_IMPL": ("DEFAULT_AGENT_IMPL", str),
             "SIA_MAX_TURNS": ("DEFAULT_MAX_TURNS", int),
             "SIA_SANDBOX_MODE": ("SANDBOX_MODE", str),
+            "SIA_BEST_OF_N": ("BEST_OF_N", int),
+            "SIA_EARLY_STOP_THRESHOLD": ("EARLY_STOP_THRESHOLD", float),
+            "SIA_VAL_FRACTION": ("VAL_FRACTION", float),
+            "SIA_TRIAGE": ("TRIAGE_MODE", str),
         }
         for env_var, (attr, converter) in env_map.items():
             val = os.environ.get(env_var)
