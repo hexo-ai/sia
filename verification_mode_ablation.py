@@ -25,7 +25,7 @@ from sia.verified import score_val
 
 GOLD = "sia/tasks/spaceship-titanic/data/private/test.csv"
 JUDGE_MODEL = "qwen3-coder:30b"
-RUNS = [41, 70, 71, 72, 73]
+RUNS = [41, 70, 71, 72, 73, 91, 93, 94, 96]
 
 
 def load(p):
