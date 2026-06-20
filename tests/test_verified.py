@@ -282,3 +282,115 @@ def test_end_to_end_subprocess_target(tmp_path):
     assert result.best is not None
     assert result.best.val == 0.5    # 2/4 correct given the gold above
     assert os.path.isfile(os.path.join(cand_root, "cand_0", "submission.csv"))
+
+
+# ---- accuracy heuristics: ensemble + repair ----
+
+def test_config_accuracy_heuristics_env(monkeypatch):
+    monkeypatch.setenv("SIA_REPAIR_RETRIES", "2")
+    monkeypatch.setenv("SIA_ENSEMBLE", "1")
+    monkeypatch.setenv("SIA_VAL_FLOOR", "0.7")
+    cfg = Config.from_env()
+    assert cfg.REPAIR_RETRIES == 2
+    assert cfg.ENSEMBLE is True
+    assert cfg.VAL_FLOOR == 0.7
+    monkeypatch.setenv("SIA_ENSEMBLE", "0")
+    assert Config.from_env().ENSEMBLE is False
+
+
+def _sub(tmp_path, name, labels):
+    p = tmp_path / name
+    pd.DataFrame({"PassengerId": ["a", "b", "c", "d"], "Transported": labels}).to_csv(p, index=False)
+    return str(p)
+
+
+def test_ensemble_majority_vote(tmp_path):
+    # 3 members; per-id majority. id 'c' is a 2-1 split -> majority wins.
+    s1 = _sub(tmp_path, "s1.csv", [True, True, True, False])
+    s2 = _sub(tmp_path, "s2.csv", [True, False, True, False])
+    s3 = _sub(tmp_path, "s3.csv", [False, True, False, False])
+    out = tmp_path / "ens.csv"
+    n = verified.ensemble_predict([(s1, 0.81), (s2, 0.80), (s3, 0.79)], str(out))
+    assert n == 3
+    got = {r["PassengerId"]: r["Transported"] for r in __import__("csv").DictReader(open(out))}
+    assert got == {"a": "True", "b": "True", "c": "True", "d": "False"}  # a:2T1F b:2T1F c:2T1F d:0T3F
+
+
+def test_ensemble_tie_breaks_to_best_val(tmp_path):
+    # 2 members disagree on every id -> tie -> best-val (s_hi) wins.
+    s_hi = _sub(tmp_path, "hi.csv", [True, True, False, False])
+    s_lo = _sub(tmp_path, "lo.csv", [False, False, True, True])
+    out = tmp_path / "ens2.csv"
+    verified.ensemble_predict([(s_lo, 0.70), (s_hi, 0.82)], str(out))
+    got = {r["PassengerId"]: r["Transported"] for r in __import__("csv").DictReader(open(out))}
+    assert got == {"a": "True", "b": "True", "c": "False", "d": "False"}  # follows s_hi
+
+
+def test_ensemble_skips_missing_files(tmp_path):
+    s1 = _sub(tmp_path, "only.csv", [True, True, True, True])
+    out = tmp_path / "ens3.csv"
+    n = verified.ensemble_predict([(s1, 0.8), (str(tmp_path / "nope.csv"), 0.9)], str(out))
+    assert n == 1
+
+
+def test_repair_loop_recovers_on_second_attempt(tmp_path):
+    oracle = tmp_path / "_oracle"; oracle.mkdir()
+    pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                  "Transported": [True, True, False, False]}).to_csv(oracle / "val.csv", index=False)
+    cand_root = tmp_path / "gen_1"; cand_root.mkdir()
+
+    seen_repair = []
+    def produce_target(gen, k, cand_dir, repair_context=None):
+        seen_repair.append(repair_context)
+        p = os.path.join(cand_dir, "target_agent.py")
+        with open(p, "w") as fh:
+            fh.write("# submission.csv val_predictions.csv\n")
+        return p
+
+    attempts = {"n": 0}
+    def run_target(cand_dir, k):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            raise RuntimeError("boom: simulated crash")   # first attempt fails
+        pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                      "Transported": [True, True, False, False]}).to_csv(
+            os.path.join(cand_dir, "val_predictions.csv"), index=False)
+        pd.DataFrame({"PassengerId": ["x"], "Transported": [True]}).to_csv(
+            os.path.join(cand_dir, "submission.csv"), index=False)
+
+    result = verified.run_verified_generation(
+        gen=1, n=1, cand_root=str(cand_root), oracle_val_csv=str(oracle / "val.csv"),
+        produce_target=produce_target, run_target=run_target,
+        label_col="Transported", id_col="PassengerId",
+        early_stop_threshold=0.99, triage_mode="off", repair_retries=2)
+    assert result.best is not None and result.best.val == 1.0   # recovered
+    assert seen_repair == [None, "run failed: boom: simulated crash"]  # 2nd call got error ctx
+
+
+def test_no_early_stop_runs_all(tmp_path):
+    oracle = tmp_path / "_oracle"; oracle.mkdir()
+    pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                  "Transported": [True, True, False, False]}).to_csv(oracle / "val.csv", index=False)
+    cand_root = tmp_path / "gen_1"; cand_root.mkdir()
+
+    def produce_target(gen, k, cand_dir, repair_context=None):
+        p = os.path.join(cand_dir, "target_agent.py")
+        open(p, "w").write("# submission.csv val_predictions.csv\n")
+        return p
+
+    ran = []
+    def run_target(cand_dir, k):
+        ran.append(k)
+        pd.DataFrame({"PassengerId": ["a", "b", "c", "d"],
+                      "Transported": [True, True, False, False]}).to_csv(  # perfect val=1.0
+            os.path.join(cand_dir, "val_predictions.csv"), index=False)
+        pd.DataFrame({"PassengerId": ["x"], "Transported": [True]}).to_csv(
+            os.path.join(cand_dir, "submission.csv"), index=False)
+
+    result = verified.run_verified_generation(
+        gen=1, n=3, cand_root=str(cand_root), oracle_val_csv=str(oracle / "val.csv"),
+        produce_target=produce_target, run_target=run_target,
+        label_col="Transported", id_col="PassengerId",
+        early_stop_threshold=0.78, triage_mode="off", no_early_stop=True)
+    assert ran == [0, 1, 2]          # did NOT early-stop despite val=1.0 at k=0
+    assert len(result.candidates) == 3

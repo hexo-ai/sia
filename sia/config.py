@@ -45,6 +45,10 @@ class Config:
     EARLY_STOP_THRESHOLD: float = 0.78
     VAL_FRACTION: float = 0.2
     TRIAGE_MODE: str = "lint"  # "lint" | "off" | "judge"
+    # ---- Verified-SIA accuracy heuristics (repair loop + ensemble) ----
+    REPAIR_RETRIES: int = 0          # fix-it turns per failed candidate (0 = off)
+    ENSEMBLE: bool = False           # deliver majority-vote of gate-passers
+    VAL_FLOOR: float = 0.75          # min val score to join the ensemble
 
     # Sandbox settings
     SANDBOX_MODE: str = "none"  # "none" or "docker"
@@ -95,6 +99,9 @@ class Config:
             "SIA_EARLY_STOP_THRESHOLD": ("EARLY_STOP_THRESHOLD", float),
             "SIA_VAL_FRACTION": ("VAL_FRACTION", float),
             "SIA_TRIAGE": ("TRIAGE_MODE", str),
+            "SIA_REPAIR_RETRIES": ("REPAIR_RETRIES", int),
+            "SIA_ENSEMBLE": ("ENSEMBLE", lambda v: v not in ("0", "false", "False", "")),
+            "SIA_VAL_FLOOR": ("VAL_FLOOR", float),
         }
         for env_var, (attr, converter) in env_map.items():
             val = os.environ.get(env_var)

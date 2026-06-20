@@ -124,6 +124,54 @@ def select_best(candidates: list[Candidate]) -> Candidate | None:
     return max(scored, key=lambda c: c.val)
 
 
+def _truthy(value) -> bool:
+    """Parse a label cell to bool: True/true/1/t/yes -> True, else False."""
+    return str(value).strip().lower() in ("true", "1", "t", "yes")
+
+
+def ensemble_predict(passer_submissions, out_path, id_col="PassengerId",
+                     label_col="Transported") -> int:
+    """Majority-vote True/False per id across gate-passing candidates' TEST submissions.
+
+    passer_submissions: list of (submission_csv_path, val_score). Missing files are
+    skipped. Ties are broken toward the highest-val passer's vote (members are sorted
+    best-val first). Writes the ensembled submission to out_path and returns the number
+    of members actually combined.
+    """
+    import collections
+    import csv
+
+    members = [(p, v) for p, v in passer_submissions if os.path.isfile(p)]
+    members.sort(key=lambda pv: -(pv[1] or 0.0))  # best val first (tie-break order)
+    votes: dict[str, list[bool]] = {}
+    order: list[str] = []
+    for path, _ in members:
+        try:
+            rows = list(csv.DictReader(open(path)))
+        except Exception:
+            continue
+        for r in rows:
+            i = r.get(id_col)
+            if i is None:
+                continue
+            if i not in votes:
+                votes[i] = []
+                order.append(i)
+            votes[i].append(_truthy(r.get(label_col)))
+    with open(out_path, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow([id_col, label_col])
+        for i in order:
+            vs = votes[i]
+            counts = collections.Counter(vs).most_common()
+            if len(counts) > 1 and counts[0][1] == counts[1][1]:
+                lab = vs[0]            # tie -> best-val passer's vote (vs is best-val first)
+            else:
+                lab = counts[0][0]
+            w.writerow([i, "True" if lab else "False"])
+    return len(members)
+
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -138,43 +186,59 @@ class GenerationResult:
 
 def run_verified_generation(gen, n, cand_root, oracle_val_csv,
                             produce_target, run_target, label_col, id_col,
-                            early_stop_threshold, triage_mode="lint"):
+                            early_stop_threshold, triage_mode="lint",
+                            repair_retries=0, no_early_stop=False):
     """Sample up to n candidates for one generation, score each on the val oracle,
-    early-stop on threshold, and select the best.
+    optionally repair failures, and select the best.
 
-    produce_target(gen, k, cand_dir) -> target_path   (writes the candidate)
-    run_target(cand_dir, k) -> None                   (executes it; writes outputs)
+    produce_target(gen, k, cand_dir[, repair_context]) -> target_path
+        Writes the candidate. On a repair attempt it is called with a non-None
+        repair_context (a short string describing the prior failure) so the producer
+        can feed the executable error back to the model.
+    run_target(cand_dir, k) -> None    Executes the target; writes its outputs.
 
-    Any exception from produce/run, or a missing val file, yields a None-scored
-    candidate (never raises). triage_mode: "lint" rejects known-fatal targets before
-    execution; "off" disables; "judge" is reserved (falls back to lint).
+    A candidate that fails to produce, is triage-rejected, fails to run, or yields no
+    scorable val file is retried up to `repair_retries` times (default 0 = no repair),
+    then recorded as None-scored (never raises). With `no_early_stop=True`, all n
+    candidates run regardless of score (used for ensembling, which needs >=2 members).
+    `triage_mode`: "lint" rejects known-fatal targets before execution; "off" disables.
     """
     candidates: list[Candidate] = []
     for k in range(n):
         cand_dir = os.path.join(cand_root, f"cand_{k}")
         os.makedirs(cand_dir, exist_ok=True)
         sub = os.path.join(cand_dir, "submission.csv")
-        try:
-            target_path = produce_target(gen, k, cand_dir)
-        except Exception as exc:                       # production failure -> skip
-            logger.warning("gen %s cand %s: produce failed: %s", gen, k, exc)
-            candidates.append(Candidate(gen, k, None, "", sub))
-            continue
-        if triage_mode != "off":
-            issues = lint_target(target_path)
-            if issues:
-                logger.info("gen %s cand %s: triage rejected: %s", gen, k, "; ".join(issues))
-                candidates.append(Candidate(gen, k, None, target_path, sub))
+        target_path, val, last_err = "", None, None
+        for attempt in range(1 + max(0, repair_retries)):
+            try:
+                if attempt == 0:
+                    target_path = produce_target(gen, k, cand_dir)
+                else:
+                    logger.info("gen %s cand %s: repair attempt %s (%s)", gen, k, attempt, last_err)
+                    target_path = produce_target(gen, k, cand_dir, repair_context=last_err)
+            except Exception as exc:
+                last_err = f"produce failed: {exc}"
+                logger.warning("gen %s cand %s: %s", gen, k, last_err)
                 continue
-        try:
-            run_target(cand_dir, k)
-        except Exception as exc:                       # execution failure -> skip
-            logger.warning("gen %s cand %s: run failed: %s", gen, k, exc)
-            candidates.append(Candidate(gen, k, None, target_path, sub))
-            continue
-        val = score_val(cand_dir, oracle_val_csv, label_col=label_col, id_col=id_col)
+            if triage_mode != "off":
+                issues = lint_target(target_path)
+                if issues:
+                    last_err = "triage rejected: " + "; ".join(issues)
+                    logger.info("gen %s cand %s: %s", gen, k, last_err)
+                    continue
+            try:
+                run_target(cand_dir, k)
+            except Exception as exc:
+                last_err = f"run failed: {exc}"
+                logger.warning("gen %s cand %s: %s", gen, k, last_err)
+                continue
+            val = score_val(cand_dir, oracle_val_csv, label_col=label_col, id_col=id_col)
+            if val is None:
+                last_err = "ran but produced no scorable val_predictions.csv"
+                continue
+            break  # success
         candidates.append(Candidate(gen, k, val, target_path, sub))
-        if val is not None and val >= early_stop_threshold:
+        if val is not None and not no_early_stop and val >= early_stop_threshold:
             logger.info("gen %s cand %s: early-stop at val=%.4f", gen, k, val)
             break
     return GenerationResult(gen=gen, candidates=candidates, best=select_best(candidates))
