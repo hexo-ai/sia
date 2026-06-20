@@ -423,15 +423,29 @@ def _run_target_agent(
 
 
 def _produce_meta_candidate(cand_dir, task_files, task_model, meta_model, agent_impl,
-                            meta_profile, target_provider, env_config, focus, cand_k):
+                            meta_profile, target_provider, env_config, focus, cand_k,
+                            repair_context=None):
     """Generation-1 production: write one meta-agent candidate target into cand_dir.
 
     Mirrors SECTION 4 but targets cand_dir and varies sampling per candidate via a
-    one-line nonce so the N candidates differ. Returns the target_agent.py path.
+    one-line nonce so the N candidates differ. On a repair attempt (repair_context set)
+    it appends the prior failure plus the captured target stdout/traceback so the model
+    can fix the executable error. Returns the target_agent.py path.
     """
     prompt = build_meta_prompt(
         task_files, task_model, cand_dir, provider=target_provider, focus=focus,
     ) + f"\n# candidate {cand_k}\n"
+    if repair_context:
+        tail = ""
+        log_path = os.path.join(cand_dir, Names.STDOUT_LOG)
+        if os.path.isfile(log_path):
+            with open(log_path, encoding="utf-8", errors="ignore") as fh:
+                tail = "".join(fh.readlines()[-40:])
+        prompt += (
+            "\n\nYOUR PREVIOUS ATTEMPT FAILED. Fix the EXACT error below and rewrite "
+            f"target_agent.py so it runs to completion.\nFailure: {repair_context}\n"
+            f"Last lines of its output:\n{tail}\n"
+        )
     write_text(os.path.join(cand_dir, Names.META_PROMPT), prompt)
     asyncio.run(run_agent(
         model_name=meta_model, max_turns=str(env_config.DEFAULT_MAX_TURNS),
@@ -959,17 +973,19 @@ def main():
     logger.info(f"Dataset directory: {abs_dataset_directory}")
 
     if use_verified:
-        from sia.verified import run_verified_generation, update_incumbent
+        from sia.verified import ensemble_predict, run_verified_generation, update_incumbent
         # Verified path: best-of-N at generation 1, execution-gated, keep-best.
         # (Multi-generation refinement under the gate is future work.)
-        logger.info("Verified-SIA: best-of-%s at generation 1 (triage=%s, early-stop=%.2f)",
-                    env_config.BEST_OF_N, env_config.TRIAGE_MODE, env_config.EARLY_STOP_THRESHOLD)
+        logger.info("Verified-SIA: best-of-%s at generation 1 (triage=%s, early-stop=%.2f, "
+                    "repair=%s, ensemble=%s)", env_config.BEST_OF_N, env_config.TRIAGE_MODE,
+                    env_config.EARLY_STOP_THRESHOLD, env_config.REPAIR_RETRIES, env_config.ENSEMBLE)
         gen_root = RunLayout(run_setup.run_directory).gen_dir(1)
 
-        def produce_target(gen, k, cand_dir):
+        def produce_target(gen, k, cand_dir, repair_context=None):
             return _produce_meta_candidate(
                 cand_dir, task_files, task_model, meta_model, agent_impl,
-                meta_profile, target_provider, env_config, args.focus, k)
+                meta_profile, target_provider, env_config, args.focus, k,
+                repair_context=repair_context)
 
         def run_target(cand_dir, k):
             _run_candidate_target(cand_dir, abs_dataset_directory, run_setup,
@@ -980,14 +996,23 @@ def main():
             oracle_val_csv=oracle_val, produce_target=produce_target,
             run_target=run_target, label_col="Transported", id_col="PassengerId",
             early_stop_threshold=env_config.EARLY_STOP_THRESHOLD,
-            triage_mode=env_config.TRIAGE_MODE)
+            triage_mode=env_config.TRIAGE_MODE,
+            repair_retries=env_config.REPAIR_RETRIES,
+            no_early_stop=env_config.ENSEMBLE)
         incumbent = update_incumbent(None, result.best)
         for c in result.candidates:
             logger.info("  cand %s: val=%s", c.k, c.val)
-        if incumbent is not None:
-            import shutil
-            shutil.copyfile(incumbent.submission_path,
-                            os.path.join(run_setup.run_directory, "submission.csv"))
+        deliverable = os.path.join(run_setup.run_directory, "submission.csv")
+        passers = [(c.submission_path, c.val) for c in result.candidates
+                   if c.val is not None and c.val >= env_config.VAL_FLOOR]
+        import shutil
+        if env_config.ENSEMBLE and len(passers) >= 2:
+            n_used = ensemble_predict(passers, deliverable)
+            logger.info("Verified deliverable: ENSEMBLE of %s gate-passers (val>=%.2f); "
+                        "best single val=%.4f", n_used, env_config.VAL_FLOOR,
+                        incumbent.val if incumbent else float("nan"))
+        elif incumbent is not None:
+            shutil.copyfile(incumbent.submission_path, deliverable)
             logger.info("Verified deliverable: incumbent val=%.4f from %s",
                         incumbent.val, incumbent.target_path)
         else:
