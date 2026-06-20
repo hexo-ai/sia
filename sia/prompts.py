@@ -15,6 +15,26 @@ if TYPE_CHECKING:
     from sia.run_setup import TaskFiles
 
 
+# Irrelevant context injected only when SIA_CONTEXT=distractor (audit experiment C):
+# plausible ML lore with no bearing on a tabular CSV task, to probe the survey's
+# "irrelevant retrieval / context rot" claim.
+_DISTRACTOR_BLOCK = """
+
+=== ADDITIONAL BACKGROUND (general ML practice) ===
+For robust deep-learning systems, prefer cosine learning-rate schedules with linear
+warmup over the first few thousand steps, and tune weight decay jointly with the peak
+learning rate. When training vision models, heavy data augmentation (random resized
+crops, RandAugment, MixUp and CutMix) is usually the single biggest lever on
+generalization, and label smoothing of about 0.1 reduces over-confidence. For
+preference tuning of language models, RLHF with PPO is sensitive to the KL penalty
+coefficient; DPO avoids a separate reward model but is sensitive to the choice of beta.
+Mixed-precision training with bf16 and gradient checkpointing lets you fit larger batch
+sizes, and EMA of the weights often improves final accuracy. For retrieval systems,
+chunk documents to roughly 200-500 tokens with overlap and re-rank the top candidates
+with a cross-encoder before generation.
+"""
+
+
 def _reference_section(task_files: TaskFiles, reference_dir: str | None) -> str:
     """The reference paragraph of the meta prompt.
 
@@ -640,6 +660,13 @@ def build_meta_prompt(
 
     # Harness mode (default - code/prompt improvement)
     reference_section = _reference_section(task_files, reference_dir)
+    # Context knob (audit experiment C), env SIA_CONTEXT in {standard,lean,distractor}.
+    # "standard" is byte-identical to the original (golden snapshot unaffected).
+    context_mode = os.environ.get("SIA_CONTEXT", "standard")
+    sample_traj = json.dumps(task_files.sample_agent_execution, indent=2)
+    if context_mode == "lean":
+        reference_section = "(reference omitted)"
+        sample_traj = "(sample trajectory omitted)"
     base = f"""You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
 
 Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve:
@@ -651,7 +678,7 @@ Here are a couple of sample task descriptions which the target agent has to solv
 {reference_section}
 
 Here is a sample agent execution trajectory:
-{json.dumps(task_files.sample_agent_execution, indent=2)}
+{sample_traj}
 
 CRITICAL RULES - FOLLOW EXACTLY:
 
@@ -705,6 +732,8 @@ CRITICAL RULES - FOLLOW EXACTLY:
 Example invocation (paths will vary at runtime):
     python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working
 """
+    if context_mode == "distractor":
+        base += _DISTRACTOR_BLOCK
     if provider is None or provider.client_kind != "openai":
         return base
     return build_target_client_setup(provider, task_model) + base

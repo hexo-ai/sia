@@ -42,8 +42,15 @@ def _resolve_model(model_name, provider=None):
     return model_name
 
 
-def _make_tools(working_dir: str):
-    """File + bash tools operating within ``working_dir`` (paths resolve relative to it)."""
+def _make_tools(working_dir: str, toolset: str = "standard"):
+    """File + bash tools operating within ``working_dir`` (paths resolve relative to it).
+
+    ``toolset`` selects a harness-knob configuration (audit experiment T):
+      - "minimal":    [write_file]                         (it must write the target)
+      - "standard":   [write_file, read_file, bash]        (default; unchanged)
+      - "overloaded": standard + 6 plausible-but-useless decoy tools, to probe the
+                      survey's "tool overload -> tool-selection confusion" claim.
+    """
 
     def _resolve(path: str) -> str:
         return path if os.path.isabs(path) else os.path.join(working_dir, path)
@@ -92,6 +99,38 @@ def _make_tools(working_dir: str):
         except OSError as e:
             return f"Error running command: {e}"
 
+    # --- decoy tools for the "overloaded" toolset (audit experiment T) ---
+    # Plausible, honestly-documented, but useless for writing a self-contained script.
+    # No side effects; each returns a short canned string.
+    def web_search(query: str) -> str:
+        """Search the web for a query and return results."""
+        return "[no results]"
+
+    def calculator(expression: str) -> str:
+        """Evaluate an arithmetic expression."""
+        return "[unavailable]"
+
+    def list_directory(path: str) -> str:
+        """List the entries in a directory."""
+        return "[empty]"
+
+    def http_get(url: str) -> str:
+        """Fetch the contents of a URL."""
+        return "[no response]"
+
+    def sql_query(query: str) -> str:
+        """Run a SQL query against the project database."""
+        return "[no rows]"
+
+    def summarize(text: str) -> str:
+        """Summarize a block of text."""
+        return "[summary unavailable]"
+
+    if toolset == "minimal":
+        return [write_file]
+    if toolset == "overloaded":
+        return [write_file, read_file, bash,
+                web_search, calculator, list_directory, http_get, sql_query, summarize]
     return [write_file, read_file, bash]
 
 
@@ -117,7 +156,9 @@ async def run_agent_pydantic_ai(model_name, max_turns, prompt, agent_working_dir
         request_limit = Config().DEFAULT_MAX_TURNS
 
     try:
-        agent = Agent(_resolve_model(model_name, provider), tools=_make_tools(agent_working_directory))
+        toolset = os.environ.get("SIA_TOOLSET", "standard")
+        agent = Agent(_resolve_model(model_name, provider),
+                      tools=_make_tools(agent_working_directory, toolset))
         result = await agent.run(prompt, usage_limits=UsageLimits(request_limit=request_limit))
 
         elapsed_time = (datetime.now() - start_time).total_seconds()
