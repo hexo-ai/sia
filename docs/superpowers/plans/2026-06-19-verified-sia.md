@@ -917,88 +917,94 @@ def _run_candidate_target(cand_dir, abs_dataset_dir, run_setup, env_config, sand
         raise RuntimeError(err or "target agent failed")
 ```
 
-- [ ] **Step 5: Wire the verified loop into the main loop**
+- [ ] **Step 5: Wire the verified path into `main()`**
 
-In `sia/orchestrator.py`, replace the body of `for current_gen in range(1, max_gen + 1):`
-(near line 920) so generation 1 uses best-of-N when enabled, and later generations are
-scored+gated:
+Scope (reliability/yield objective): the verified path runs **best-of-N at
+generation 1 only** — that is where the 5-seed study showed runs fail for lack of any
+valid solution, and best-of-N directly fixes it. Multi-generation feedback refinement
+under the gate is explicit future work (it needs per-candidate feedback context). This
+also avoids a correctness trap: the existing `run_generation` for gen>1 assumes the
+prior generation's feedback step already wrote `gen_<g>/target_agent.py`, which the
+verified gen-1 path does not produce.
+
+5a. **Compute `use_verified` right after SECTION 2 (`run_setup = setup_run_directory(...)`)**, because SECTION 4 must be skipped when verified:
 
 ```python
-    from sia.verified import (Candidate, run_verified_generation, score_val,
-                              update_incumbent)
     oracle_val = os.path.join(run_setup.run_directory, "_oracle", "val.csv")
     use_verified = env_config.BEST_OF_N > 1 and os.path.isfile(oracle_val)
-    incumbent = None
-
-    for current_gen in range(1, max_gen + 1):
-        logger.info("=" * 80)
-        logger.info(f"Starting Generation {current_gen} of {max_gen}")
-        logger.info("=" * 80)
-
-        if use_verified and current_gen == 1:
-            gen_root = RunLayout(run_setup.run_directory).gen_dir(1)
-
-            def produce_target(gen, k, cand_dir):
-                return _produce_meta_candidate(
-                    cand_dir, task_files, task_model, meta_model, agent_impl,
-                    meta_profile, target_provider, env_config, args.focus, k)
-
-            def run_target(cand_dir, k):
-                _run_candidate_target(cand_dir, abs_dataset_directory, run_setup,
-                                      env_config, args.sandbox)
-
-            result = run_verified_generation(
-                gen=1, n=env_config.BEST_OF_N, cand_root=gen_root,
-                oracle_val_csv=oracle_val, produce_target=produce_target,
-                run_target=run_target, label_col="Transported", id_col="PassengerId",
-                early_stop_threshold=env_config.EARLY_STOP_THRESHOLD,
-                triage_mode=env_config.TRIAGE_MODE)
-            incumbent = update_incumbent(incumbent, result.best)
-            logger.info("Gen 1: best val=%s; incumbent val=%s",
-                        result.best.val if result.best else None,
-                        incumbent.val if incumbent else None)
-            continue
-
-        # Default path (gen>1, or verified disabled): existing single-candidate run.
-        run_generation(
-            current_gen=current_gen, max_gen=max_gen, run_setup=run_setup,
-            task_files=task_files, abs_dataset_dir=abs_dataset_directory,
-            dataset_dir=dataset_directory, meta_profile=meta_profile,
-            sandbox=args.sandbox, env_config=env_config, task_model=task_model,
-            target_provider=target_provider, focus=args.focus,
-            training_sandbox=args.training_sandbox, resolved_ref=resolved_ref,
-        )
-        if use_verified:
-            gen_dir = RunLayout(run_setup.run_directory).gen_dir(current_gen)
-            val = score_val(gen_dir, oracle_val, label_col="Transported",
-                            id_col="PassengerId")
-            cand = Candidate(current_gen, 0, val,
-                             os.path.join(gen_dir, Names.TARGET_AGENT),
-                             os.path.join(gen_dir, "submission.csv"))
-            incumbent = update_incumbent(incumbent, cand)
-            logger.info("Gen %s: val=%s; incumbent val=%s", current_gen, val,
-                        incumbent.val if incumbent else None)
 ```
 
-Note `meta_model` and `agent_impl` are already in scope in `main()` (set near
-`orchestrator.py:795` / passed to `setup_run_directory`). After the loop, if
-`use_verified` and `incumbent` is not None, copy the incumbent's submission to the run
-root as the deliverable:
+5b. **Guard SECTION 4's standalone meta-agent run.** The verified path produces its own
+N candidates, so the single SECTION 4 meta invocation is redundant and must be skipped.
+Wrap the existing `asyncio.run(run_agent(... meta ...))` block (near `orchestrator.py:905`)
+in `if not use_verified:` (the prompt-build and `write_text` above it may stay; only the
+`asyncio.run(...)` meta call needs guarding, but guarding the whole SECTION 4 body is
+fine).
+
+5c. **Replace the `for current_gen ...` loop (SECTION 5) with a branch:**
 
 ```python
-    if use_verified and incumbent is not None:
-        import shutil
-        shutil.copyfile(incumbent.submission_path,
-                        os.path.join(run_setup.run_directory, "submission.csv"))
-        logger.info("Deliverable: incumbent val=%.4f from %s",
-                    incumbent.val, incumbent.target_path)
-    elif use_verified:
-        logger.warning("No competitive solution produced (no incumbent).")
+    if use_verified:
+        from sia.verified import run_verified_generation, update_incumbent
+        # Verified path: best-of-N at generation 1, execution-gated, keep-best.
+        # (Multi-generation refinement under the gate is future work.)
+        logger.info("Verified-SIA: best-of-%s at generation 1 (triage=%s, early-stop=%.2f)",
+                    env_config.BEST_OF_N, env_config.TRIAGE_MODE, env_config.EARLY_STOP_THRESHOLD)
+        gen_root = RunLayout(run_setup.run_directory).gen_dir(1)
+
+        def produce_target(gen, k, cand_dir):
+            return _produce_meta_candidate(
+                cand_dir, task_files, task_model, meta_model, agent_impl,
+                meta_profile, target_provider, env_config, args.focus, k)
+
+        def run_target(cand_dir, k):
+            _run_candidate_target(cand_dir, abs_dataset_directory, run_setup,
+                                  env_config, args.sandbox)
+
+        result = run_verified_generation(
+            gen=1, n=env_config.BEST_OF_N, cand_root=gen_root,
+            oracle_val_csv=oracle_val, produce_target=produce_target,
+            run_target=run_target, label_col="Transported", id_col="PassengerId",
+            early_stop_threshold=env_config.EARLY_STOP_THRESHOLD,
+            triage_mode=env_config.TRIAGE_MODE)
+        incumbent = update_incumbent(None, result.best)
+        for c in result.candidates:
+            logger.info("  cand %s: val=%s", c.k, c.val)
+        if incumbent is not None:
+            import shutil
+            shutil.copyfile(incumbent.submission_path,
+                            os.path.join(run_setup.run_directory, "submission.csv"))
+            logger.info("Verified deliverable: incumbent val=%.4f from %s",
+                        incumbent.val, incumbent.target_path)
+        else:
+            logger.warning("Verified-SIA: no competitive solution produced (no incumbent).")
+    else:
+        dataset_directory = task_layout.dataset_dir
+        abs_dataset_directory = task_layout.abs_dataset_dir  # (keep existing lines)
+        for current_gen in range(1, max_gen + 1):
+            logger.info("=" * 80)
+            logger.info(f"Starting Generation {current_gen} of {max_gen}")
+            logger.info("=" * 80)
+            run_generation(
+                current_gen=current_gen, max_gen=max_gen, run_setup=run_setup,
+                task_files=task_files, abs_dataset_dir=abs_dataset_directory,
+                dataset_dir=dataset_directory, meta_profile=meta_profile,
+                sandbox=args.sandbox, env_config=env_config, task_model=task_model,
+                target_provider=target_provider, focus=args.focus,
+                training_sandbox=args.training_sandbox, resolved_ref=resolved_ref,
+            )
+            # ... keep the existing weights-mode early-stop block unchanged ...
 ```
 
-**Follow-up (out of scope here):** gen>1 best-of-N requires building per-candidate
-feedback context from the incumbent's prior run (`_build_feedback_context` +
-`_run_feedback_agent` into each cand_dir). Track as a separate task.
+Notes: `meta_model`, `agent_impl`, `task_model`, `target_provider`, `task_files`,
+`meta_profile` are all already in scope in `main()`. `abs_dataset_directory` /
+`dataset_directory` are defined just before the existing loop — keep those definitions
+available to both branches (define them before the `if use_verified:`). The existing
+weights-mode early-stop check stays inside the `else` loop unchanged.
+
+**Follow-up (tracked separately):** multi-generation best-of-N under the gate —
+build per-candidate feedback context from the incumbent's run (`_build_feedback_context`
++ `_run_feedback_agent`).
 
 - [ ] **Step 6: Run the full verified suite + a real smoke run**
 

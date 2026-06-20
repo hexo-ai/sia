@@ -5,3 +5,14 @@ __pycache__/
 venv/
 *.egg-info/
 .env
+# val-split + run artifacts that leak into the working tree (Verified-SIA wart)
+/submission.csv
+/test.csv
+/train_inner.csv
+/val_features.csv
+/val_predictions.csv
+sia/tasks/spaceship-titanic/data/public/train_inner.csv
+sia/tasks/spaceship-titanic/data/public/val_features.csv
+sia/tasks/spaceship-titanic/data/public/val_predictions.csv
+sia/tasks/spaceship-titanic/data/public/submission.csv
+sia/tasks/spaceship-titanic/data/public/agent_execution.json
