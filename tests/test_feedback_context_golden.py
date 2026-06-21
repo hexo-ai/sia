@@ -146,3 +146,45 @@ def test_malformed_transfer_evidence_does_not_break_context(tmp_path):
     assert "valid reusable change" in snapshot
     assert "Task-specific branch" in snapshot
     assert "Missing evidence" in snapshot
+
+
+def test_negative_delta_transfer_evidence_is_not_rendered_as_reusable(tmp_path):
+    gen_dir = tmp_path / "gen_2"
+    gen_dir.mkdir()
+    (gen_dir / "agent_execution.json").write_text(json.dumps([{"role": "user", "content": "attempt"}]))
+    transfer_evidence_path = gen_dir / "transfer_evidence.json"
+    transfer_evidence_path.write_text(
+        json.dumps(
+            {
+                "generation": 2,
+                "accepted_for_reuse": False,
+                "evaluator_status": "passed",
+                "score_delta": -0.4,
+                "reusable_changes": ["Reusable-looking change"],
+                "task_specific_residue": ["Task-specific fallback"],
+                "unsupported_claims": [],
+                "negative_probe_hits": 0,
+                "claim_boundary": "Do not carry negative-delta changes forward.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    stdout_log = str(gen_dir / "target_agent_stdout.log")
+
+    status, section = _build_feedback_context(
+        current_gen=2,
+        gen_dir=str(gen_dir),
+        dataset_dir="/data/public",
+        target_agent_success=True,
+        target_agent_error_msg="",
+        target_agent_stdout="line1\nline2\n",
+        target_agent_stderr="",
+        stdout_log_file=stdout_log,
+        task_files=TASK_FILES,
+        transfer_evidence_path=str(transfer_evidence_path),
+    )
+
+    snapshot = _snapshot(gen_dir, stdout_log, status, section)
+    assert "Accepted for reuse: no" in snapshot
+    assert "Candidate changes not accepted for reuse" in snapshot
+    assert "Accepted reusable changes" not in snapshot
