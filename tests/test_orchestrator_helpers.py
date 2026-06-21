@@ -304,7 +304,7 @@ def test_build_transfer_evidence_card_keeps_reusable_and_residue(tmp_path):
 def test_build_transfer_evidence_card_marks_missing_data(tmp_path):
     gen1 = tmp_path / "gen_1"
     gen1.mkdir()
-    (gen1 / "results.json").write_text(json.dumps({"notes": "skipped"}))
+    (gen1 / "results.json").write_text(json.dumps({"correct": 9, "total": 10}))
 
     card = _build_transfer_evidence_card(
         current_gen=1,
