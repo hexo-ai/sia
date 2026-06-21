@@ -84,6 +84,7 @@ __all__ = [
 
 _TRANSFER_EVIDENCE_MAX_BULLETS = 5
 _TRANSFER_EVIDENCE_SCORE_KEYS = ("accuracy", "score", "f1", "reward", "loss")
+_TRANSFER_EVIDENCE_LOWER_IS_BETTER_KEYS = {"loss"}
 _RESIDUE_HINTS = (
     "task-specific",
     "this task",
@@ -166,6 +167,14 @@ def _read_previous_score(current_gen: int, gen_dir: str, score_key: str | None) 
     return value
 
 
+def _score_delta_supports_reuse(score_key: str | None, score_delta: float | None) -> bool:
+    if score_delta is None:
+        return True
+    if score_key in _TRANSFER_EVIDENCE_LOWER_IS_BETTER_KEYS:
+        return score_delta < 0
+    return score_delta >= 0
+
+
 def _build_transfer_evidence_card(
     current_gen: int,
     gen_dir: str,
@@ -210,9 +219,9 @@ def _build_transfer_evidence_card(
             "quality."
         )
 
-    accepted_for_reuse = evaluator_status == "passed" and bool(reusable_bullets)
-    if score_delta is not None and score_delta < 0:
-        accepted_for_reuse = False
+    accepted_for_reuse = (
+        evaluator_status == "passed" and bool(reusable_bullets) and _score_delta_supports_reuse(score_key, score_delta)
+    )
 
     return TransferEvidenceCard(
         generation=current_gen,
