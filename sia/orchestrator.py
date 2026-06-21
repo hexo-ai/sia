@@ -274,7 +274,12 @@ def _format_transfer_evidence_section(transfer_evidence_path: str | None) -> str
         lines.append(f"- Score delta: {score_delta:+.4f}")
 
     if reusable:
-        lines.append("- Accepted reusable changes:")
+        reusable_label = (
+            "- Accepted reusable changes:"
+            if accepted_for_reuse is not False
+            else "- Candidate changes not accepted for reuse:"
+        )
+        lines.append(reusable_label)
         lines.extend(f"  * {item}" for item in reusable)
 
     if residue:

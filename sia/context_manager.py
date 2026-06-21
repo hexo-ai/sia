@@ -614,7 +614,12 @@ class ContextManager:
                     entry += f"  * Accepted for reuse: {'yes' if accepted_for_reuse else 'no'}\n"
                 reusable = transfer_evidence.get("reusable_changes", [])
                 if isinstance(reusable, list) and reusable:
-                    entry += "  * Reusable guidance:\n"
+                    reusable_label = (
+                        "  * Reusable guidance:\n"
+                        if accepted_for_reuse is not False
+                        else "  * Candidate changes rejected for reuse:\n"
+                    )
+                    entry += reusable_label
                     for item in reusable[:3]:
                         if not isinstance(item, str):
                             continue
