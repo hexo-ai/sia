@@ -220,6 +220,7 @@ class ContextManager:
                 - agent_path: str, path to target_agent.py
                 - gen_dir: str, path to generation directory
                 - improvement_path: Optional[str], path to improvement.md
+                - transfer_evidence_path: Optional[str], path to transfer_evidence.json
                 - execution_type: str, 'Single' or 'Multi-trajectory'
         """
         # Extract agent stats
@@ -237,16 +238,30 @@ class ContextManager:
         # Extract metrics
         metrics = self._extract_metrics(gen_data["gen_dir"])
 
-        # Extract insights from improvement.md (if exists)
+        # Prefer transfer_evidence.json when available, fallback to improvement.md
+        transfer_evidence = self._load_transfer_evidence(gen_data.get("transfer_evidence_path"))
         insights = []
-        if gen_data.get("improvement_path") and os.path.exists(gen_data["improvement_path"]):
+        if (
+            transfer_evidence is None
+            and gen_data.get("improvement_path")
+            and os.path.exists(gen_data["improvement_path"])
+        ):
             insights = self._extract_insights(gen_data["improvement_path"])
 
         # Generate LLM summary of changes and improvements
         llm_summary = self._generate_llm_summary(gen_num, gen_data, metrics)
 
         # Format entry
-        entry = self._format_generation_entry(gen_num, gen_data, agent_stats, deltas, metrics, insights, llm_summary)
+        entry = self._format_generation_entry(
+            gen_num=gen_num,
+            gen_data=gen_data,
+            stats=agent_stats,
+            deltas=deltas,
+            metrics=metrics,
+            insights=insights,
+            llm_summary=llm_summary,
+            transfer_evidence=transfer_evidence,
+        )
 
         # Append to file
         with open(self.context_path, "a", encoding="utf-8") as f:
@@ -263,6 +278,14 @@ class ContextManager:
         )
 
         logger.info(f"Added Generation {gen_num} to context.md")
+
+    def _load_transfer_evidence(self, transfer_evidence_path: str | None) -> dict[str, Any] | None:
+        if transfer_evidence_path is None:
+            return None
+        evidence = _safe_load_json(transfer_evidence_path)
+        if not isinstance(evidence, dict):
+            return None
+        return evidence
 
     def finalize(self):
         """Add summary statistics at the end of context.md"""
@@ -459,6 +482,7 @@ class ContextManager:
         deltas: dict[str, float],
         metrics: dict[str, Any],
         insights: list[str],
+        transfer_evidence: dict[str, Any] | None = None,
         llm_summary: str | None = None,
     ) -> str:
         """Format markdown entry for a generation"""
@@ -489,7 +513,29 @@ class ContextManager:
 - File size: {stats["size"]:,} bytes ({delta_size_str})
 - Lines: {stats["lines"]} ({delta_lines_str} lines)
 """
-            if insights:
+            if transfer_evidence:
+                entry += "- Transfer evidence carryover:\n"
+                entry += f"  * Reuse boundary: {transfer_evidence.get('claim_boundary', 'Reuse boundary follows the card.')}\n"
+                reusable = transfer_evidence.get("reusable_bullets", [])
+                if isinstance(reusable, list) and reusable:
+                    entry += "  * Reusable guidance:\n"
+                    for item in reusable[:3]:
+                        entry += f"    * {item}\n"
+                residue = transfer_evidence.get("residue_bullets", [])
+                if isinstance(residue, list) and residue:
+                    entry += "  * Residue / caution (not safe to reuse):\n"
+                    for item in residue[:3]:
+                        entry += f"    * {item}\n"
+                unsupported = transfer_evidence.get("unsupported_claims", [])
+                if isinstance(unsupported, list) and unsupported:
+                    entry += "  * Unsupported claim notes:\n"
+                    for item in unsupported[:3]:
+                        entry += f"    * {item}\n"
+                score_key = transfer_evidence.get("score_key")
+                score_delta = transfer_evidence.get("score_delta")
+                if score_key and isinstance(score_delta, (int, float)):
+                    entry += f"  * Score change ({score_key}): {score_delta:+.4f}\n"
+            elif insights:
                 entry += "- Key changes from improvement.md:\n"
                 for insight in insights[:3]:
                     # Truncate very long insights

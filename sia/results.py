@@ -7,7 +7,8 @@ and callers depend on.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -32,3 +33,27 @@ class FeedbackContext:
 
     def as_tuple(self) -> tuple[str, str]:
         return (self.execution_status, self.execution_section)
+
+
+@dataclass
+class TransferEvidenceCard:
+    """Structured output produced after each generation for feedback context and context carryover."""
+
+    evaluator_status: str
+    score_delta: float | None
+    score_key: str | None
+    reusable_bullets: list[str] = field(default_factory=list)
+    residue_bullets: list[str] = field(default_factory=list)
+    unsupported_claims: list[str] = field(default_factory=list)
+    claim_boundary: str = "No evidence supports task-agnostic transfer beyond the reusable bullets above."
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "evaluator_status": self.evaluator_status,
+            "score_delta": self.score_delta,
+            "score_key": self.score_key,
+            "reusable_bullets": self.reusable_bullets,
+            "residue_bullets": self.residue_bullets,
+            "unsupported_claims": self.unsupported_claims,
+            "claim_boundary": self.claim_boundary,
+        }

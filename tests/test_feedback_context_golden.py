@@ -3,6 +3,7 @@ the feedback prompt across the success/failure x single/multi x results matrix.
 """
 
 import json
+from pathlib import Path
 
 from golden_master import assert_golden, normalize_paths
 
@@ -13,7 +14,27 @@ TASK_FILES = TaskFiles("desc", "ref", {}, "# Task")
 
 def _snapshot(gen_dir, stdout_log_file, status, section) -> str:
     text = "===== EXECUTION STATUS =====\n" + status + "\n===== EXECUTION SECTION =====\n" + section
-    return normalize_paths(text, {str(gen_dir): "<GEN>", str(stdout_log_file): "<LOG>"})
+    return normalize_paths(text, {str(gen_dir): "<GEN>", str(stdout_log_file): "<LOG>"}).replace("\\", "/")
+
+
+def _write_transfer_evidence(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "evaluator_status": "evaluator_completed",
+                "score_key": "accuracy",
+                "score_delta": 0.15,
+                "reusable_bullets": [
+                    "Use metric-guided rollout tuning for prompt templates.",
+                    "Avoid brittle assumptions about dataset-specific fields.",
+                ],
+                "residue_bullets": ["Task-specific retries were introduced in this run."],
+                "unsupported_claims": ["No claim about benchmark portability was validated."],
+                "claim_boundary": "Treat residue as task-specific context.",
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_success_single_with_results(tmp_path):
@@ -22,6 +43,8 @@ def test_success_single_with_results(tmp_path):
     (gen_dir / "agent_execution.json").write_text(json.dumps([{"role": "user", "content": "solve it"}]))
     (gen_dir / "results.json").write_text(json.dumps({"accuracy": 0.9, "correct": 9, "total": 10}))
     stdout_log = str(gen_dir / "target_agent_stdout.log")
+    transfer_evidence_path = gen_dir / "transfer_evidence.json"
+    _write_transfer_evidence(transfer_evidence_path)
 
     status, section = _build_feedback_context(
         current_gen=1,
@@ -33,6 +56,7 @@ def test_success_single_with_results(tmp_path):
         target_agent_stderr="",
         stdout_log_file=stdout_log,
         task_files=TASK_FILES,
+        transfer_evidence_path=str(transfer_evidence_path),
     )
     assert_golden("feedback_context_success_single.txt", _snapshot(gen_dir, stdout_log, status, section))
 

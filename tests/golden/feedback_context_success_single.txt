@@ -1,7 +1,5 @@
 ===== EXECUTION STATUS =====
 SUCCESS: Target agent completed execution successfully.
-
-
 **EVALUATION RESULTS**:
 ```json
 {
@@ -11,6 +9,16 @@ SUCCESS: Target agent completed execution successfully.
 }
 ```
 
+**TRANSFER EVIDENCE**: evaluator=evaluator_completed
+- score_delta (accuracy): +0.1500
+- Reusable guidance:
+  * Use metric-guided rollout tuning for prompt templates.
+  * Avoid brittle assumptions about dataset-specific fields.
+- Explicit residue (do not treat as reusable):
+  * Task-specific retries were introduced in this run.
+- Unsupported claim notes:
+  * No claim about benchmark portability was validated.
+- Claim boundary: Treat residue as task-specific context.
 
 **Last 10 lines of output**:
 ```

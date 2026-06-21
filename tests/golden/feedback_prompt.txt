@@ -10,9 +10,10 @@ You are an expert AI Engineer analyzing agent scaffolds for iterative improvemen
    - What improvements were tried in each previous generation
    - Performance trends across generations
    - What worked and what didn't work
-2. Review previous improvement.md files from earlier generations if helpful
-3. Don't repeat failed approaches from earlier generations
-4. Build upon successful patterns that improved performance
+2. Read /RUN/run_1/gen_2/transfer_evidence.json and treat residue as non-reusable context
+3. Review previous improvement.md files from earlier generations if helpful
+4. Don't repeat failed approaches from earlier generations
+5. Build upon successful patterns that improved performance
 
 ---
 

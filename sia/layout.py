@@ -30,6 +30,7 @@ class Names:
     TRAIN_STDOUT_LOG = "train_stdout.log"
     EVAL_LOG = "evaluation.log"
     RESULTS_JSON = "results.json"
+    TRANSFER_EVIDENCE_JSON = "transfer_evidence.json"
     CONTEXT_MD = "context.md"
     IMPROVEMENT_MD = "improvement.md"
     META_PROMPT = "meta_agent_prompt.txt"
@@ -142,6 +143,9 @@ class RunLayout:
 
     def improvement_md(self, n: int) -> str:
         return os.path.join(self.gen_dir(n), Names.IMPROVEMENT_MD)
+
+    def transfer_evidence_json(self, n: int) -> str:
+        return os.path.join(self.gen_dir(n), Names.TRANSFER_EVIDENCE_JSON)
 
     def agent_execution_dir(self, n: int) -> str:
         return os.path.join(self.gen_dir(n), Names.AGENT_EXECUTION_DIR)
