@@ -143,11 +143,6 @@ def _read_score(results_data: dict[str, Any] | None, score_key: str | None = Non
         except (TypeError, ValueError):
             continue
 
-    for candidate_key, raw_value in results_data.items():
-        if not isinstance(raw_value, (int, float)):
-            continue
-        return candidate_key, float(raw_value)
-
     return None, None
 
 
