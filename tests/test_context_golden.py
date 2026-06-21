@@ -22,15 +22,17 @@ IMPROVEMENT_MD = (
     "- Improved logging to capture each tool call and its result for later analysis.\n"
 )
 TRANSFER_EVIDENCE = {
-    "evaluator_status": "evaluator_completed",
+    "generation": 2,
+    "accepted_for_reuse": True,
+    "evaluator_status": "passed",
     "score_delta": 25.0,
-    "score_key": "accuracy",
-    "reusable_bullets": [
+    "reusable_changes": [
         "Added structured error handling so the agent recovers from tool failures gracefully.",
         "Improved logging to capture each tool call and its result for later analysis.",
     ],
-    "residue_bullets": ["The retry loop is task-specific to this evaluation harness."],
+    "task_specific_residue": ["The retry loop is task-specific to this evaluation harness."],
     "unsupported_claims": ["No benchmark-portable claim was validated in this run."],
+    "negative_probe_hits": 0,
     "claim_boundary": "Treat residue as task-specific context.",
 }
 

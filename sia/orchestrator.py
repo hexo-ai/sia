@@ -99,8 +99,17 @@ _RESIDUE_HINTS = (
 logger = get_logger(__name__)
 
 
-def _truncate_transfer_list(values: list[str]) -> list[str]:
-    return [value.strip() for value in values[:_TRANSFER_EVIDENCE_MAX_BULLETS] if value.strip()]
+def _truncate_transfer_list(values: list[Any]) -> list[str]:
+    cleaned: list[str] = []
+    for value in values:
+        if len(cleaned) >= _TRANSFER_EVIDENCE_MAX_BULLETS:
+            break
+        if not isinstance(value, str):
+            continue
+        stripped = value.strip()
+        if stripped:
+            cleaned.append(stripped)
+    return cleaned
 
 
 def _extract_improvement_bullets(improvement_content: str) -> list[str]:
@@ -167,15 +176,13 @@ def _build_transfer_evidence_card(
     results_data = safe_load_json(results_path)
     results_data_dict = results_data if isinstance(results_data, dict) else None
 
-    evaluator_status = "results_missing"
+    evaluator_status = "missing"
     if evaluation_result.get("status") == "success" and results_data_dict is not None:
-        evaluator_status = "evaluator_completed"
+        evaluator_status = "passed"
     elif evaluation_result.get("status") == "error":
-        evaluator_status = f"evaluator_error: {evaluation_result.get('reason', 'unknown_error')}"
-    elif evaluation_result.get("status") == "warning":
-        evaluator_status = "evaluator_results_missing"
-    elif evaluation_result.get("status") == "skipped":
-        evaluator_status = "evaluator_skipped"
+        evaluator_status = "error"
+    elif results_data_dict is not None:
+        evaluator_status = "failed"
 
     score_key, score_value = _read_score(results_data_dict)
     prev_score = _read_previous_score(current_gen, gen_dir, score_key)
@@ -204,11 +211,12 @@ def _build_transfer_evidence_card(
         )
 
     return TransferEvidenceCard(
+        generation=current_gen,
+        accepted_for_reuse=evaluator_status == "passed" and bool(reusable_bullets),
         evaluator_status=evaluator_status,
         score_delta=score_delta,
-        score_key=score_key,
-        reusable_bullets=_truncate_transfer_list(reusable_bullets),
-        residue_bullets=_truncate_transfer_list(residue_bullets),
+        reusable_changes=_truncate_transfer_list(reusable_bullets),
+        task_specific_residue=_truncate_transfer_list(residue_bullets),
         unsupported_claims=unsupported_claims,
         claim_boundary=default_claim_boundary,
     )
@@ -234,12 +242,14 @@ def _format_transfer_evidence_section(transfer_evidence_path: str | None) -> str
     if not isinstance(transfer_data, dict):
         return "**TRANSFER EVIDENCE**:\nMalformed transfer_evidence.json, reuse boundary is unavailable."
 
-    score_key = transfer_data.get("score_key")
+    accepted_for_reuse = transfer_data.get("accepted_for_reuse")
     score_delta = transfer_data.get("score_delta")
     evaluator_status = transfer_data.get("evaluator_status", "unknown")
+    generation = transfer_data.get("generation")
+    negative_probe_hits = transfer_data.get("negative_probe_hits")
 
-    reusable_data = transfer_data.get("reusable_bullets", [])
-    residue_data = transfer_data.get("residue_bullets", [])
+    reusable_data = transfer_data.get("reusable_changes", [])
+    residue_data = transfer_data.get("task_specific_residue", [])
     unsupported_data = transfer_data.get("unsupported_claims", [])
     claim_boundary = transfer_data.get("claim_boundary") or ""
 
@@ -248,28 +258,41 @@ def _format_transfer_evidence_section(transfer_evidence_path: str | None) -> str
     unsupported = _truncate_transfer_list(unsupported_data) if isinstance(unsupported_data, list) else []
 
     lines = [f"**TRANSFER EVIDENCE**: evaluator={evaluator_status}"]
-    if score_key is not None:
-        if isinstance(score_delta, (int, float)):
-            lines.append(f"- score_delta ({score_key}): {score_delta:+.4f}")
-        else:
-            lines.append(f"- score_delta ({score_key}): unavailable")
+    if isinstance(generation, int):
+        lines.append(f"- Generation: {generation}")
+    if isinstance(accepted_for_reuse, bool):
+        lines.append(f"- Accepted for reuse: {'yes' if accepted_for_reuse else 'no'}")
+    if isinstance(score_delta, (int, float)):
+        lines.append(f"- Score delta: {score_delta:+.4f}")
 
     if reusable:
-        lines.append("- Reusable guidance:")
+        lines.append("- Accepted reusable changes:")
         lines.extend(f"  * {item}" for item in reusable)
 
     if residue:
-        lines.append("- Explicit residue (do not treat as reusable):")
+        lines.append("- Task-specific residue to avoid carrying forward:")
         lines.extend(f"  * {item}" for item in residue)
 
     if unsupported:
         lines.append("- Unsupported claim notes:")
         lines.extend(f"  * {item}" for item in unsupported)
 
+    if isinstance(negative_probe_hits, int):
+        lines.append(f"- Negative probe hits: {negative_probe_hits}")
+
     if claim_boundary:
         lines.append(f"- Claim boundary: {claim_boundary}")
 
-    if not (score_key or reusable or residue or unsupported or claim_boundary):
+    if not (
+        isinstance(generation, int)
+        or isinstance(accepted_for_reuse, bool)
+        or isinstance(score_delta, (int, float))
+        or reusable
+        or residue
+        or unsupported
+        or isinstance(negative_probe_hits, int)
+        or claim_boundary
+    ):
         lines.append("- No usable transfer signal was detected.")
 
     return "\n".join(lines)

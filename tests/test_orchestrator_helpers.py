@@ -79,10 +79,12 @@ def test_build_transfer_evidence_card_keeps_reusable_and_residue(tmp_path):
         evaluation_result={"status": "success"},
     )
 
-    assert card.score_key == "accuracy"
+    assert card.generation == 2
+    assert card.accepted_for_reuse is True
+    assert card.evaluator_status == "passed"
     assert math.isclose(card.score_delta, 0.15, rel_tol=0, abs_tol=1e-12)
-    assert card.reusable_bullets == ["Added generic prompt retry flow."]
-    assert card.residue_bullets == ["This task-specific branch added a hardcoded guard for sample 17."]
+    assert card.reusable_changes == ["Added generic prompt retry flow."]
+    assert card.task_specific_residue == ["This task-specific branch added a hardcoded guard for sample 17."]
 
 
 def test_build_transfer_evidence_card_marks_missing_data(tmp_path):
@@ -97,6 +99,6 @@ def test_build_transfer_evidence_card_marks_missing_data(tmp_path):
         evaluation_result={"status": "warning"},
     )
 
-    assert card.evaluator_status == "evaluator_results_missing"
-    assert card.score_key is None
+    assert card.accepted_for_reuse is False
+    assert card.evaluator_status == "failed"
     assert card.unsupported_claims

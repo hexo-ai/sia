@@ -134,9 +134,14 @@ def test_multiple_generations_track_deltas(mock_llm, context_mgr, run_dir):
     (gen2 / "results.json").write_text(json.dumps({"accuracy": 0.85}))
     (gen2 / "improvement.md").write_text("## Changes\n- Added better error handling\n- Improved prompt structure\n")
     transfer_evidence = {
+        "generation": 2,
+        "accepted_for_reuse": True,
+        "evaluator_status": "passed",
+        "score_delta": 0.15,
         "claim_boundary": "Treat residue as task-specific context.",
-        "reusable_bullets": ["Added better error handling"],
-        "residue_bullets": ["Hardcoded this task's timeout to avoid false positives."],
+        "reusable_changes": ["Added better error handling"],
+        "task_specific_residue": ["Hardcoded this task's timeout to avoid false positives."],
+        "negative_probe_hits": 0,
     }
     (gen2 / "transfer_evidence.json").write_text(json.dumps(transfer_evidence))
 
