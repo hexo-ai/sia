@@ -609,25 +609,33 @@ class ContextManager:
             if transfer_evidence:
                 entry += "- Transfer evidence carryover:\n"
                 entry += f"  * Reuse boundary: {transfer_evidence.get('claim_boundary', 'Reuse boundary follows the card.')}\n"
-                reusable = transfer_evidence.get("reusable_bullets", [])
+                accepted_for_reuse = transfer_evidence.get("accepted_for_reuse")
+                if isinstance(accepted_for_reuse, bool):
+                    entry += f"  * Accepted for reuse: {'yes' if accepted_for_reuse else 'no'}\n"
+                reusable = transfer_evidence.get("reusable_changes", [])
                 if isinstance(reusable, list) and reusable:
                     entry += "  * Reusable guidance:\n"
                     for item in reusable[:3]:
+                        if not isinstance(item, str):
+                            continue
                         entry += f"    * {item}\n"
-                residue = transfer_evidence.get("residue_bullets", [])
+                residue = transfer_evidence.get("task_specific_residue", [])
                 if isinstance(residue, list) and residue:
                     entry += "  * Residue / caution (not safe to reuse):\n"
                     for item in residue[:3]:
+                        if not isinstance(item, str):
+                            continue
                         entry += f"    * {item}\n"
                 unsupported = transfer_evidence.get("unsupported_claims", [])
                 if isinstance(unsupported, list) and unsupported:
                     entry += "  * Unsupported claim notes:\n"
                     for item in unsupported[:3]:
+                        if not isinstance(item, str):
+                            continue
                         entry += f"    * {item}\n"
-                score_key = transfer_evidence.get("score_key")
                 score_delta = transfer_evidence.get("score_delta")
-                if score_key and isinstance(score_delta, (int, float)):
-                    entry += f"  * Score change ({score_key}): {score_delta:+.4f}\n"
+                if isinstance(score_delta, (int, float)):
+                    entry += f"  * Score change: {score_delta:+.4f}\n"
             elif insights:
                 entry += "- Key changes from improvement.md:\n"
                 for insight in insights[:3]:

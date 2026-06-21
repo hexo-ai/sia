@@ -43,6 +43,7 @@
 - Lines: 8 (+7 lines)
 - Transfer evidence carryover:
   * Reuse boundary: Treat residue as task-specific context.
+  * Accepted for reuse: yes
   * Reusable guidance:
     * Added structured error handling so the agent recovers from tool failures gracefully.
     * Improved logging to capture each tool call and its result for later analysis.
@@ -50,7 +51,7 @@
     * The retry loop is task-specific to this evaluation harness.
   * Unsupported claim notes:
     * No benchmark-portable claim was validated in this run.
-  * Score change (accuracy): +25.0000
+  * Score change: +25.0000
 
 ### Execution Summary
 - Execution status: ✓ SUCCESS

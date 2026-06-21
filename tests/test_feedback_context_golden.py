@@ -21,15 +21,17 @@ def _write_transfer_evidence(path: Path) -> None:
     path.write_text(
         json.dumps(
             {
-                "evaluator_status": "evaluator_completed",
-                "score_key": "accuracy",
+                "generation": 1,
+                "accepted_for_reuse": True,
+                "evaluator_status": "passed",
                 "score_delta": 0.15,
-                "reusable_bullets": [
+                "reusable_changes": [
                     "Use metric-guided rollout tuning for prompt templates.",
                     "Avoid brittle assumptions about dataset-specific fields.",
                 ],
-                "residue_bullets": ["Task-specific retries were introduced in this run."],
+                "task_specific_residue": ["Task-specific retries were introduced in this run."],
                 "unsupported_claims": ["No claim about benchmark portability was validated."],
+                "negative_probe_hits": 0,
                 "claim_boundary": "Treat residue as task-specific context.",
             }
         ),
@@ -102,3 +104,45 @@ def test_success_multi_with_results(tmp_path):
         task_files=TASK_FILES,
     )
     assert_golden("feedback_context_success_multi.txt", _snapshot(gen_dir, stdout_log, status, section))
+
+
+def test_malformed_transfer_evidence_does_not_break_context(tmp_path):
+    gen_dir = tmp_path / "gen_1"
+    gen_dir.mkdir()
+    (gen_dir / "agent_execution.json").write_text(json.dumps([{"role": "user", "content": "attempt"}]))
+    transfer_evidence_path = gen_dir / "transfer_evidence.json"
+    transfer_evidence_path.write_text(
+        json.dumps(
+            {
+                "generation": 1,
+                "accepted_for_reuse": False,
+                "evaluator_status": "missing",
+                "reusable_changes": [1, "valid reusable change"],
+                "task_specific_residue": [None, "Task-specific branch"],
+                "unsupported_claims": [2, "Missing evidence"],
+                "negative_probe_hits": 1,
+                "claim_boundary": "Stay conservative.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    stdout_log = str(gen_dir / "target_agent_stdout.log")
+
+    status, section = _build_feedback_context(
+        current_gen=1,
+        gen_dir=str(gen_dir),
+        dataset_dir="/data/public",
+        target_agent_success=True,
+        target_agent_error_msg="",
+        target_agent_stdout="line1\nline2\n",
+        target_agent_stderr="",
+        stdout_log_file=stdout_log,
+        task_files=TASK_FILES,
+        transfer_evidence_path=str(transfer_evidence_path),
+    )
+
+    snapshot = _snapshot(gen_dir, stdout_log, status, section)
+    assert "**TRANSFER EVIDENCE**: evaluator=missing" in snapshot
+    assert "valid reusable change" in snapshot
+    assert "Task-specific branch" in snapshot
+    assert "Missing evidence" in snapshot

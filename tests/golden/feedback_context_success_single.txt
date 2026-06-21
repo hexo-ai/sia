@@ -9,15 +9,18 @@ SUCCESS: Target agent completed execution successfully.
 }
 ```
 
-**TRANSFER EVIDENCE**: evaluator=evaluator_completed
-- score_delta (accuracy): +0.1500
-- Reusable guidance:
+**TRANSFER EVIDENCE**: evaluator=passed
+- Generation: 1
+- Accepted for reuse: yes
+- Score delta: +0.1500
+- Accepted reusable changes:
   * Use metric-guided rollout tuning for prompt templates.
   * Avoid brittle assumptions about dataset-specific fields.
-- Explicit residue (do not treat as reusable):
+- Task-specific residue to avoid carrying forward:
   * Task-specific retries were introduced in this run.
 - Unsupported claim notes:
   * No claim about benchmark portability was validated.
+- Negative probe hits: 0
 - Claim boundary: Treat residue as task-specific context.
 
 **Last 10 lines of output**:
