@@ -778,6 +778,7 @@ def build_feedback_prompt(
     told it may add/edit a requirements.txt there. ``None`` keeps the historical text.
     """
     context_md_path = os.path.join(run_dir, "context.md")
+    transfer_evidence_path = os.path.join(run_dir, f"gen_{current_gen}", "transfer_evidence.json")
 
     # Handle weights mode (RL-based tuning)
     if focus == "weights":
@@ -789,13 +790,11 @@ def build_feedback_prompt(
 - Evolution history: {context_md_path}
 
 **BEFORE ANALYZING - READ THE FULL HISTORY**:
-1. Read {context_md_path} to understand:
-   - What improvements were tried in each previous generation
-   - Training and performance trends across generations
-   - What worked and what didn't work
-2. Review previous improvement.md files from earlier generations if helpful
-3. Don't repeat failed approaches from earlier generations
-4. Build upon successful RL patterns that improved performance
+1. Read {context_md_path} for the full generation history
+2. Read {transfer_evidence_path} and treat only reusable bullets as reusable guidance
+3. Review previous improvement.md files from earlier generations if helpful
+4. Don't repeat failed approaches from earlier generations
+5. Build upon successful RL patterns that improved performance
 
 ---
 
@@ -882,9 +881,10 @@ NOTE: If you see errors or incomplete execution logs, focus on making the RL pip
    - What improvements were tried in each previous generation
    - Performance trends across generations
    - What worked and what didn't work
-2. Review previous improvement.md files from earlier generations if helpful
-3. Don't repeat failed approaches from earlier generations
-4. Build upon successful patterns that improved performance
+2. Read {transfer_evidence_path} and treat residue as non-reusable context
+3. Review previous improvement.md files from earlier generations if helpful
+4. Don't repeat failed approaches from earlier generations
+5. Build upon successful patterns that improved performance
 
 ---
 

@@ -133,6 +133,12 @@ def test_multiple_generations_track_deltas(mock_llm, context_mgr, run_dir):
     (gen2 / "target_agent.py").write_text("print('improved')\nimport os\n")
     (gen2 / "results.json").write_text(json.dumps({"accuracy": 0.85}))
     (gen2 / "improvement.md").write_text("## Changes\n- Added better error handling\n- Improved prompt structure\n")
+    transfer_evidence = {
+        "claim_boundary": "Treat residue as task-specific context.",
+        "reusable_bullets": ["Added better error handling"],
+        "residue_bullets": ["Hardcoded this task's timeout to avoid false positives."],
+    }
+    (gen2 / "transfer_evidence.json").write_text(json.dumps(transfer_evidence))
 
     context_mgr.add_generation(
         gen_num=2,
@@ -143,6 +149,7 @@ def test_multiple_generations_track_deltas(mock_llm, context_mgr, run_dir):
             "agent_path": str(gen2 / "target_agent.py"),
             "gen_dir": str(gen2),
             "improvement_path": str(gen2 / "improvement.md"),
+            "transfer_evidence_path": str(gen2 / "transfer_evidence.json"),
             "execution_type": "Single",
         },
     )
@@ -150,6 +157,7 @@ def test_multiple_generations_track_deltas(mock_llm, context_mgr, run_dir):
     content = (run_dir / "context.md").read_text()
     assert "Generation 2" in content
     assert "Modified by feedback agent" in content
+    assert "Transfer evidence carryover" in content
 
 
 # --- Bounded items summary (verifier->feedback contract) -------------------
