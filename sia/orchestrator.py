@@ -210,9 +210,13 @@ def _build_transfer_evidence_card(
             "quality."
         )
 
+    accepted_for_reuse = evaluator_status == "passed" and bool(reusable_bullets)
+    if score_delta is not None and score_delta < 0:
+        accepted_for_reuse = False
+
     return TransferEvidenceCard(
         generation=current_gen,
-        accepted_for_reuse=evaluator_status == "passed" and bool(reusable_bullets),
+        accepted_for_reuse=accepted_for_reuse,
         evaluator_status=evaluator_status,
         score_delta=score_delta,
         reusable_changes=_truncate_transfer_list(reusable_bullets),
