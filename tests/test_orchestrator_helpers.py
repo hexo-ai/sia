@@ -360,3 +360,45 @@ def test_build_transfer_evidence_card_accepts_lower_loss(tmp_path):
 
     assert math.isclose(card.score_delta, -0.4, rel_tol=0, abs_tol=1e-12)
     assert card.accepted_for_reuse is True
+
+
+def test_build_transfer_evidence_card_rejects_non_improving_percent_metric(tmp_path):
+    gen1 = tmp_path / "gen_1"
+    gen2 = tmp_path / "gen_2"
+    gen1.mkdir()
+    gen2.mkdir()
+
+    (gen1 / "results.json").write_text(json.dumps({"accuracy": "90%"}))
+    (gen2 / "results.json").write_text(json.dumps({"accuracy": "50%"}))
+    (gen2 / "improvement.md").write_text("- Added reusable planning scaffold.\n")
+
+    card = _build_transfer_evidence_card(
+        current_gen=2,
+        gen_dir=str(gen2),
+        improvement_path=str(gen2 / "improvement.md"),
+        evaluation_result={"status": "success"},
+    )
+
+    assert math.isclose(card.score_delta, -40.0, rel_tol=0, abs_tol=1e-12)
+    assert card.accepted_for_reuse is False
+
+
+def test_build_transfer_evidence_card_rejects_zero_delta_accuracy(tmp_path):
+    gen1 = tmp_path / "gen_1"
+    gen2 = tmp_path / "gen_2"
+    gen1.mkdir()
+    gen2.mkdir()
+
+    (gen1 / "results.json").write_text(json.dumps({"accuracy": 0.9}))
+    (gen2 / "results.json").write_text(json.dumps({"accuracy": 0.9}))
+    (gen2 / "improvement.md").write_text("- Added reusable planning scaffold.\n")
+
+    card = _build_transfer_evidence_card(
+        current_gen=2,
+        gen_dir=str(gen2),
+        improvement_path=str(gen2 / "improvement.md"),
+        evaluation_result={"status": "success"},
+    )
+
+    assert math.isclose(card.score_delta, 0.0, rel_tol=0, abs_tol=1e-12)
+    assert card.accepted_for_reuse is False

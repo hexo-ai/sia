@@ -152,7 +152,8 @@ def _read_score(results_data: dict[str, Any] | None, score_key: str | None = Non
         if not isinstance(raw_value, (int, float, str)):
             continue
         try:
-            value = float(raw_value)
+            parsed_value = raw_value.rstrip("%") if isinstance(raw_value, str) else raw_value
+            value = float(parsed_value)
             return key, value
         except (TypeError, ValueError):
             continue
@@ -176,7 +177,7 @@ def _score_delta_supports_reuse(score_key: str | None, score_delta: float | None
         return True
     if score_key in _TRANSFER_EVIDENCE_LOWER_IS_BETTER_KEYS:
         return score_delta < 0
-    return score_delta >= 0
+    return score_delta > 0
 
 
 def _build_transfer_evidence_card(
