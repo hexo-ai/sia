@@ -318,3 +318,24 @@ def test_build_transfer_evidence_card_marks_missing_data(tmp_path):
     assert card.accepted_for_reuse is False
     assert card.evaluator_status == "failed"
     assert card.unsupported_claims
+
+
+def test_build_transfer_evidence_card_rejects_negative_score_delta(tmp_path):
+    gen1 = tmp_path / "gen_1"
+    gen2 = tmp_path / "gen_2"
+    gen1.mkdir()
+    gen2.mkdir()
+
+    (gen1 / "results.json").write_text(json.dumps({"accuracy": 0.9}))
+    (gen2 / "results.json").write_text(json.dumps({"accuracy": 0.5}))
+    (gen2 / "improvement.md").write_text("- Added reusable planning scaffold.\n")
+
+    card = _build_transfer_evidence_card(
+        current_gen=2,
+        gen_dir=str(gen2),
+        improvement_path=str(gen2 / "improvement.md"),
+        evaluation_result={"status": "success"},
+    )
+
+    assert math.isclose(card.score_delta, -0.4, rel_tol=0, abs_tol=1e-12)
+    assert card.accepted_for_reuse is False
