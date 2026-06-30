@@ -104,4 +104,4 @@ exclude = ["sia/tasks/"]
 
 [tool.ty.rules]
 not-iterable = "ignore"        # false positive on guarded attribute access
-unresolved-import = "warn"     # tests use sys.path manipulation
+unresolved-import = "ignore"   # optional providers are lazily imported, not installed in lint
