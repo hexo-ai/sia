@@ -8,7 +8,7 @@ from sia.providers import Provider, available_providers, load_provider
 
 
 def test_bundled_providers_present():
-    assert set(available_providers()) >= {"anthropic", "gemini", "openai", "together", "nebius"}
+    assert set(available_providers()) >= {"anthropic", "gemini", "openai", "together", "nebius", "edenai"}
 
 
 def test_load_anthropic_provider():
@@ -25,6 +25,15 @@ def test_load_nebius_provider():
     assert p.client_kind == "openai"
     assert p.base_url == "https://api.tokenfactory.us-central1.nebius.com/v1/"
     assert p.api_key_env == "NEBIUS_API_KEY"
+
+
+def test_load_edenai_provider():
+    p = load_provider("edenai")
+    assert isinstance(p, Provider)
+    assert p.provider_id == "edenai"
+    assert p.client_kind == "openai"
+    assert p.base_url == "https://api.edenai.run/v3"
+    assert p.api_key_env == "EDENAI_API_KEY"
 
 
 def test_unknown_provider_name_raises():

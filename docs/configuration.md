@@ -59,7 +59,12 @@ Configuration is **declarative JSON** you can extend without touching code.
 }
 ```
 
-Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`.
+Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`, `edenai`.
+
+> `edenai` ([Eden AI](https://www.edenai.co/)) is an OpenAI-compatible gateway to 100+ models
+> (Mistral, OpenAI, Anthropic, Google, and more) through a single EU-based endpoint and one
+> `EDENAI_API_KEY`. Because `client_kind` is `openai`, the generated target agent talks to it
+> with the OpenAI SDK at Eden's `base_url` — no code change.
 
 ### Profiles — one per agent role
 
@@ -185,6 +190,7 @@ export GEMINI_API_KEY="..."      # gemini provider  (or GOOGLE_API_KEY via openh
 export OPENAI_API_KEY="..."      # openai provider
 export TOGETHER_API_KEY="..."    # together provider
 export NEBIUS_API_KEY="..."      # nebius provider
+export EDENAI_API_KEY="..."      # edenai provider (OpenAI-compatible gateway)
 ```
 
 ## Comparing multiple LLMs on the same task

@@ -1,0 +1,7 @@
+{
+  "provider_id": "edenai",
+  "name": "Eden AI",
+  "client_kind": "openai",
+  "base_url": "https://api.edenai.run/v3",
+  "api_key_env": "EDENAI_API_KEY"
+}
