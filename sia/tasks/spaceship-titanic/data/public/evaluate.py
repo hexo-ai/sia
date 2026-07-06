@@ -130,7 +130,6 @@ def evaluate_submission(submission: dict[str, bool | None], labels: dict[str, bo
         predicted = submission.get(passenger_id)
         detail = {
             "passenger_id": passenger_id,
-            "expected": expected,
             "predicted": predicted,
             "is_correct": False,
         }
@@ -158,11 +157,45 @@ def evaluate_submission(submission: dict[str, bool | None], labels: dict[str, bo
     return results
 
 
+def _detail_to_item(detail: dict) -> dict:
+    """Map an internal detail row to the leak-safe items[] contract (no gold labels)."""
+    status_map = {
+        "correct": "CORRECT",
+        "incorrect": "WRONG",
+        "missing": "MISSING",
+        "invalid": "INVALID",
+    }
+    return {
+        "id": detail["passenger_id"],
+        "status": status_map.get(detail["status"], detail["status"].upper()),
+        "output": detail.get("predicted"),
+        "detail": detail["status"],
+    }
+
+
 def save_results(results: dict, output_path: Path) -> None:
-    """Write evaluator results as JSON."""
+    """Write evaluator results as JSON (summary scalars + items[], no gold labels)."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    summary = {
+        key: results[key]
+        for key in (
+            "total_questions",
+            "correct",
+            "incorrect",
+            "missing",
+            "invalid",
+            "extra_predictions",
+            "accuracy",
+            "accuracy_percent",
+            "timestamp",
+        )
+    }
+    payload = {
+        "summary": summary,
+        "items": [_detail_to_item(row) for row in results["details"]],
+    }
     with output_path.open("w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+        json.dump(payload, f, indent=2)
 
 
 def print_summary(results: dict) -> None:

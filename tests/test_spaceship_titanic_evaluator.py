@@ -53,13 +53,15 @@ def test_default_gen_dir_output_is_results_json(monkeypatch, tmp_path):
     output_path = gen_dir / "results.json"
     assert output_path.is_file()
     results = json.loads(output_path.read_text(encoding="utf-8"))
-    assert results["total_questions"] == 2
-    assert results["correct"] == 1
-    assert results["incorrect"] == 1
-    assert results["missing"] == 0
-    assert results["invalid"] == 0
-    assert results["accuracy"] == pytest.approx(0.5)
-    assert results["accuracy_percent"] == pytest.approx(50.0)
+    summary = results["summary"]
+    assert summary["total_questions"] == 2
+    assert summary["correct"] == 1
+    assert summary["incorrect"] == 1
+    assert summary["missing"] == 0
+    assert summary["invalid"] == 0
+    assert summary["accuracy"] == pytest.approx(0.5)
+    assert summary["accuracy_percent"] == pytest.approx(50.0)
+    assert "expected" not in output_path.read_text(encoding="utf-8")
 
 
 def test_evaluate_submission_counts_missing_invalid_and_extra(tmp_path):
@@ -94,3 +96,33 @@ def test_evaluate_submission_counts_missing_invalid_and_extra(tmp_path):
     assert results["accuracy"] == pytest.approx(1 / 3)
     assert results["accuracy_percent"] == pytest.approx(100 / 3)
     assert {row["status"] for row in results["details"]} == {"correct", "invalid", "missing"}
+
+
+def test_save_results_omits_gold_labels(tmp_path):
+    evaluator = _load_evaluator()
+    results = {
+        "total_questions": 1,
+        "correct": 0,
+        "incorrect": 1,
+        "missing": 0,
+        "invalid": 0,
+        "extra_predictions": 0,
+        "accuracy": 0.0,
+        "accuracy_percent": 0.0,
+        "timestamp": "2026-01-01T00:00:00+00:00",
+        "details": [
+            {
+                "passenger_id": "0001_01",
+                "predicted": False,
+                "is_correct": False,
+                "status": "incorrect",
+            }
+        ],
+    }
+    output_path = tmp_path / "results.json"
+    evaluator.save_results(results, output_path)
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    assert "summary" in payload and "items" in payload
+    assert "expected" not in output_path.read_text(encoding="utf-8")
+    assert payload["items"][0]["id"] == "0001_01"
+    assert payload["items"][0]["status"] == "WRONG"
