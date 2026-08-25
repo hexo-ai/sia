@@ -21,6 +21,26 @@ set any cost field to 0 (token counts from the API response are still fine to re
 Pass a finite timeout to every request if the client method supports it, and cap
 retries at 2 so a stalled provider response cannot hang the whole evaluation.
 
+CRITICAL — the response shape is NOT the same. This is the most common way this
+refactor breaks. An OpenAI-style response has NO content blocks: `message.content` is a
+plain string (or None), and tool calls live in a separate `message.tool_calls` list.
+Iterating `message.content` and reading `block.type` / `block.text` / `block.input` is
+Anthropic-only and raises `AttributeError: 'str' object has no attribute 'type'`.
+Port every response-handling branch, not just the client construction:
+
+    msg = response.choices[0].message
+    if msg.content:                          # plain string, not a list of blocks
+        print(msg.content)
+    for call in (msg.tool_calls or []):      # separate list, absent when no tools used
+        name = call.function.name
+        args = json.loads(call.function.arguments)   # a JSON *string*, must be parsed
+        tool_id = call.id
+
+Append the assistant turn as the message object itself, then one message per tool
+result — `{"role": "tool", "tool_call_id": tool_id, "content": result_str}` — rather
+than Anthropic's single user message carrying `tool_result` blocks. Stop when
+`response.choices[0].finish_reason != "tool_calls"`.
+
 You are a meta-agent. Your task is to create a target agent which can execute a task. Go ahead and create a target_agent.py for the target agent, which in turn can solve the given task.
 
 Here is the FULL TASK SPECIFICATION that your target_agent.py will need to solve:
