@@ -101,3 +101,25 @@ def test_target_profile_file_reference(tmp_path):
     assert profile.agent_reference.kind == "file"
     assert profile.agent_reference.source is not None
     assert profile.agent_reference.source.name == "my_agent.py"
+
+
+def test_model_canonical_name_is_optional(tmp_path):
+    """A meta profile without model_canonical_name loads with None (today's behaviour)."""
+    path = _write_profile(
+        tmp_path,
+        {
+            "profile_id": "p",
+            "name": "P",
+            "agent_impl": "openhands",
+            "model": "anthropic/claude-haiku-4.5",
+            "provider_id": "openrouter",
+        },
+    )
+    assert load_meta_agent_profile(path).model_canonical_name is None
+
+
+def test_model_canonical_name_is_read_when_present():
+    """The bundled OpenRouter meta profile carries the vendor's canonical id."""
+    profile = load_meta_agent_profile("openrouter-meta")
+    assert profile.model == "anthropic/claude-haiku-4.5"
+    assert profile.model_canonical_name == "claude-haiku-4-5"

@@ -166,3 +166,119 @@ def test_run_agent_threads_provider_to_agent_impl():
     nebius = load_provider("nebius")
     asyncio.run(base.run_agent("m", "5", "p", "/tmp", agent_impl="capture-test", provider=nebius))
     assert captured["provider"] is nebius
+
+
+def test_openhands_model_uses_provider_declared_litellm_prefix():
+    """A provider naming its own litellm provider is routed there, not via the generic openai one."""
+    from sia.agent_impls.openhands import _resolve_model
+    from sia.providers import load_provider
+
+    openrouter = load_provider("openrouter")
+    assert openrouter.litellm_prefix == "openrouter"
+    assert _resolve_model("anthropic/claude-haiku-4.5", openrouter) == "openrouter/anthropic/claude-haiku-4.5"
+    # Already-prefixed specs are not double-prefixed.
+    assert (
+        _resolve_model("openrouter/anthropic/claude-haiku-4.5", openrouter) == "openrouter/anthropic/claude-haiku-4.5"
+    )
+    # A gateway model id that merely starts with "openai/" is a vendor namespace, not a route:
+    # it must still be prefixed (the old hardcoded guard skipped it and left it misrouted).
+    assert _resolve_model("openai/gpt-oss-120b", openrouter) == "openrouter/openai/gpt-oss-120b"
+
+    # Providers that declare no prefix keep the generic openai route, unchanged.
+    nebius = load_provider("nebius")
+    assert nebius.litellm_prefix is None
+    assert _resolve_model("moonshotai/Kimi-K2.6", nebius) == "openai/moonshotai/Kimi-K2.6"
+
+
+def test_run_agent_forwards_model_canonical_name_only_when_set():
+    """The canonical name reaches the impl when set, and is omitted otherwise.
+
+    Omitting it keeps runners registered against the older signature -- including third-party
+    impls -- working, since ``register()`` is a public extension point.
+    """
+    import asyncio
+
+    from sia.agent_impls import base
+
+    captured = {}
+
+    async def canonical_runner(model, max_turns, prompt, cwd, provider=None, model_canonical_name=None):
+        captured["canonical"] = model_canonical_name
+
+    base.register("canonical-test", canonical_runner)
+    asyncio.run(
+        base.run_agent("m", "5", "p", "/tmp", agent_impl="canonical-test", model_canonical_name="claude-haiku-4-5")
+    )
+    assert captured["canonical"] == "claude-haiku-4-5"
+
+    # Unset -> the kwarg is not passed at all, so a legacy runner signature still accepts the call.
+    legacy = {}
+
+    async def legacy_runner(model, max_turns, prompt, cwd, provider=None):
+        legacy["called"] = True
+
+    base.register("legacy-test", legacy_runner)
+    asyncio.run(base.run_agent("m", "5", "p", "/tmp", agent_impl="legacy-test"))
+    assert legacy["called"] is True
+
+
+def test_openrouter_prefix_preserves_cache_control_on_the_wire(monkeypatch):
+    """The generic openai route silently strips cache_control; the openrouter route keeps it.
+
+    This is the whole point of provider-declared prefixes: OpenHands emits the breakpoints either
+    way, so a capability flag alone proves nothing -- only the serialised body does.
+    """
+    pytest.importorskip("openhands")
+    import json
+
+    import httpx
+    from openhands.sdk import LLM
+    from openhands.sdk.llm import Message, TextContent
+
+    captured = {}
+
+    def fake_send(self, request, **kwargs):
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "id": "x",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "anthropic/claude-haiku-4.5",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12},
+            },
+        )
+
+    monkeypatch.setattr(httpx.Client, "send", fake_send)
+
+    def capture(model_spec):
+        captured.clear()
+        llm = LLM(
+            model=model_spec,
+            model_canonical_name="claude-haiku-4-5",
+            api_key="sk-not-a-real-key",
+            base_url="https://openrouter.ai/api/v1",
+            reasoning_effort=None,
+            usage_id=model_spec,
+        )
+        messages = [
+            Message(role="system", content=[TextContent(text="SYS")]),
+            Message(role="user", content=[TextContent(text="hi")]),
+        ]
+        llm.completion(messages=messages)
+        return llm, captured["body"]
+
+    llm, body = capture("openrouter/anthropic/claude-haiku-4.5")
+    assert "cache_control" in json.dumps(body["messages"]), "cache_control must survive to the wire"
+    # reasoning_effort is pinned off, so naming a litellm provider cannot silently enable thinking.
+    assert "reasoning_effort" not in body
+    # Capability lookup via the canonical name also repairs context-window detection.
+    assert llm.max_input_tokens and llm.max_output_tokens
+
+    # The generic openai route strips the markers, which is the bug being fixed. Note the
+    # capability gate reports caching active in BOTH cases -- only the payload differs.
+    _, generic_body = capture("openai/anthropic/claude-haiku-4.5")
+    assert "cache_control" not in json.dumps(generic_body["messages"])

@@ -11,7 +11,7 @@ what's installed.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sia.logging_setup import get_logger
 
@@ -53,6 +53,7 @@ async def run_agent(
     agent_working_directory: str,
     agent_impl: str = "claude",
     provider: Provider | None = None,
+    model_canonical_name: str | None = None,
 ) -> None:
     """Dispatch to the named agent impl.
 
@@ -63,6 +64,13 @@ async def run_agent(
         agent_working_directory: Working directory for the agent.
         agent_impl: Which registered impl to use (e.g. "claude", "openhands", "pydantic-ai").
         provider: Optional endpoint/credentials for the model (api_key_env, base_url).
+        model_canonical_name: Optional canonical model id for SDK capability lookups. Only
+            forwarded when set, so runners registered against the older signature -- including
+            third-party impls -- keep working; when it is set and the runner cannot accept it,
+            the resulting TypeError is loud rather than a silently ignored capability.
     """
     logger.info(f"Using {agent_impl} agent impl")
-    await get_agent_impl(agent_impl)(model_name, max_turns, prompt, agent_working_directory, provider=provider)
+    kwargs: dict[str, Any] = {"provider": provider}
+    if model_canonical_name is not None:
+        kwargs["model_canonical_name"] = model_canonical_name
+    await get_agent_impl(agent_impl)(model_name, max_turns, prompt, agent_working_directory, **kwargs)

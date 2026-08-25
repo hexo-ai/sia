@@ -625,6 +625,7 @@ def _run_feedback_agent(
             agent_working_directory=next_gen_dir,
             agent_impl=meta_profile.agent_impl,
             provider=meta_profile.provider,
+            model_canonical_name=meta_profile.model_canonical_name,
         )
     )
 
@@ -909,6 +910,7 @@ def main():
             agent_working_directory=run_setup.meta_agent_working_directory,
             agent_impl=agent_impl,
             provider=meta_profile.provider,
+            model_canonical_name=meta_profile.model_canonical_name,
         )
     )
 

@@ -78,3 +78,23 @@ def test_user_dir_overrides_bundled(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("SIA_PROVIDERS_DIR", str(providers_dir))
     assert load_provider("nebius").base_url == "https://override/v1"
+
+
+def test_litellm_prefix_is_optional_and_defaults_to_none(tmp_path):
+    """Providers omitting litellm_prefix keep the generic openai route."""
+    path = tmp_path / "custom.json"
+    path.write_text(
+        json.dumps(
+            {
+                "provider_id": "custom",
+                "name": "Custom",
+                "client_kind": "openai",
+                "base_url": "https://example.test/v1",
+                "api_key_env": "CUSTOM_API_KEY",
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert load_provider(str(path)).litellm_prefix is None
+    # The bundled OpenRouter provider names its own litellm provider.
+    assert load_provider("openrouter").litellm_prefix == "openrouter"
