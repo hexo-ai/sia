@@ -14,12 +14,54 @@ from __future__ import annotations
 import os
 import subprocess
 from datetime import datetime
+from json import JSONDecodeError
 
 from sia.agent_impls.base import register
 from sia.config import Config
 from sia.logging_setup import get_logger
 
 logger = get_logger(__name__)
+
+
+class MalformedProviderResponseError(RuntimeError):
+    """Raised when a provider returns a successful HTTP response that is not valid JSON."""
+
+
+def _require_provider_api_key(provider):
+    """Return the configured provider API key, failing before SDK fallback env vars can leak in."""
+    api_key = os.getenv(provider.api_key_env)
+    if not api_key:
+        raise RuntimeError(
+            f"Missing API key for provider {provider.name} ({provider.provider_id}). "
+            f"Set ${provider.api_key_env} before using this profile."
+        )
+    return api_key
+
+
+def _is_openrouter_provider(provider) -> bool:
+    base_url = (provider.base_url or "").rstrip("/")
+    return provider.provider_id == "openrouter" or base_url == "https://openrouter.ai/api/v1"
+
+
+def _describe_provider(model_name, provider) -> str:
+    if provider is None:
+        return f"model={model_name!r}, provider=<native PydanticAI resolution>"
+    return (
+        f"model={model_name!r}, provider={provider.name} ({provider.provider_id}), "
+        f"client_kind={provider.client_kind}, base_url={provider.base_url or '<native>'}, "
+        f"api_key_env=${provider.api_key_env}"
+    )
+
+
+def _malformed_response_message(model_name, provider, exc: JSONDecodeError) -> str:
+    return (
+        "Provider returned a 200 response body that the OpenAI SDK could not parse as JSON. "
+        f"{_describe_provider(model_name, provider)}. "
+        f"JSON error: {exc.msg} at line {exc.lineno} column {exc.colno}. "
+        "Check that the selected model supports OpenAI-compatible chat/tool calls on this provider, "
+        "that the configured API key belongs to that provider, and retry; this is usually a provider "
+        "compatibility or transient gateway response issue rather than an agent tool error."
+    )
 
 
 def _resolve_model(model_name, provider=None):
@@ -32,12 +74,20 @@ def _resolve_model(model_name, provider=None):
     if not isinstance(model_name, str) or provider is None:
         return model_name
     if provider.client_kind == "openai" and provider.base_url:
+        api_key = _require_provider_api_key(provider)
+
         from pydantic_ai.models.openai import OpenAIChatModel
+
+        if _is_openrouter_provider(provider):
+            from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+            return OpenAIChatModel(model_name, provider=OpenRouterProvider(api_key=api_key))
+
         from pydantic_ai.providers.openai import OpenAIProvider
 
         return OpenAIChatModel(
             model_name,
-            provider=OpenAIProvider(base_url=provider.base_url, api_key=os.getenv(provider.api_key_env)),
+            provider=OpenAIProvider(base_url=provider.base_url, api_key=api_key),
         )
     return model_name
 
@@ -126,6 +176,12 @@ async def run_agent_pydantic_ai(model_name, max_turns, prompt, agent_working_dir
         logger.debug(f"{'=' * 80}")
         logger.info(f"Execution complete in {elapsed_time:.2f} seconds")
 
+    except JSONDecodeError as e:
+        message = _malformed_response_message(model_name, provider, e)
+        logger.error(f"\n{'!' * 80}")
+        logger.error(f"ERROR: {message}")
+        logger.error(f"{'!' * 80}", exc_info=True)
+        raise MalformedProviderResponseError(message) from e
     except Exception as e:
         logger.error(f"\n{'!' * 80}")
         logger.error(f"ERROR: {e!s}")

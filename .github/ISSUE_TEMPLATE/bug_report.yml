@@ -1,0 +1,155 @@
+name: Bug report
+description: Report a reproducible problem with SIA.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve SIA. Please include enough detail for maintainers to reproduce the issue.
+
+        Do not include API keys, secrets, private task data, or other sensitive information in this report.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the problem.
+      placeholder: SIA fails when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest set of steps or commands needed to reproduce the issue.
+      placeholder: |
+        1. Install with ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+      placeholder: I expected SIA to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+      placeholder: Instead, SIA...
+    validations:
+      required: true
+
+  - type: input
+    id: sia-version
+    attributes:
+      label: SIA version
+      description: Include the package version, commit SHA, or branch you are using.
+      placeholder: sia-agent 0.5.1, main@abc1234, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Installation method
+      options:
+        - pip install sia-agent
+        - pip install -e ".[dev]"
+        - source checkout
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: Python 3.11.9
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Ubuntu 24.04, macOS 15, Windows 11, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: agent-impl
+    attributes:
+      label: Agent implementation
+      description: Select the agent implementation involved, if applicable.
+      options:
+        - claude
+        - openhands
+        - pydantic-ai
+        - not sure / not applicable
+    validations:
+      required: false
+
+  - type: input
+    id: model-provider
+    attributes:
+      label: Model/provider
+      description: Include the model/provider if relevant. Do not include API keys.
+      placeholder: anthropic/claude-..., openai/..., gemini/..., etc.
+    validations:
+      required: false
+
+  - type: input
+    id: task
+    attributes:
+      label: Task
+      description: Include the bundled task or external task directory if relevant.
+      placeholder: gpqa, lawbench, longcot-chess, spaceship-titanic, ./my-task
+    validations:
+      required: false
+
+  - type: input
+    id: sandbox
+    attributes:
+      label: Sandbox mode
+      description: Include the sandbox mode if relevant.
+      placeholder: --sandbox docker, --sandbox none, not applicable
+    validations:
+      required: false
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or code
+      description: Paste the command or minimal code that triggered the issue.
+      render: shell
+      placeholder: sia run --task gpqa --max_gen 3 --run_id 1
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or error output
+      description: Paste relevant logs or traceback output. Remove secrets, API keys, and private data.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra-context
+    attributes:
+      label: Additional context
+      description: Add any other context, links, screenshots, or notes that may help.
+    validations:
+      required: false

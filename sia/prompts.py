@@ -701,6 +701,7 @@ CRITICAL RULES - FOLLOW EXACTLY:
 6. Do NOT attempt to write to or modify files inside the dataset directory. It is READ-ONLY.
 7. The target_agent.py should use only the "{task_model}" model when invoking the language model (do not use any other model).
 8. DO NOT hardcode any specific dataset paths in the target_agent.py code. The paths will be provided at runtime via command-line arguments and MUST be passed to {task_model} in the prompt.
+9. Any network/API call made by target_agent.py MUST use a finite request timeout of 60 seconds or less, and retry no more than 2 times before recording an error for that sample. Do not let one stalled model response block the entire run indefinitely.
 
 Example invocation (paths will vary at runtime):
     python target_agent.py --dataset_dir /path/to/dataset --working_dir /path/to/working
@@ -730,12 +731,15 @@ refactor your target_agent.py to use the `openai` SDK configured for this provid
     client = OpenAI(
         base_url="{provider.base_url}",
         api_key=os.environ["{provider.api_key_env}"],
+        timeout=60.0,
     )
 
 Call client.chat.completions.create(model="{task_model}", ...) using OpenAI-style
 messages (and OpenAI function calling / response_format where the reference uses
 structured output). Do NOT compute a dollar cost: per-provider pricing is unknown, so
 set any cost field to 0 (token counts from the API response are still fine to record).
+Pass a finite timeout to every request if the client method supports it, and cap
+retries at 2 so a stalled provider response cannot hang the whole evaluation.
 
 """
 
