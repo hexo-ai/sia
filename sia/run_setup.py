@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 from sia.config import Config
 from sia.context_manager import ContextManager
-from sia.layout import RunLayout, TaskLayout, venv_pip_path, venv_python_path
+from sia.layout import Names, RunLayout, TaskLayout, bundled_shared_dir, venv_pip_path, venv_python_path
 from sia.logging_setup import get_logger
 
 if TYPE_CHECKING:
@@ -88,6 +88,32 @@ def load_task_files(
     )
 
 
+def load_harbor_task_files(benchmark: str, sample_descriptions: str) -> TaskFiles:
+    """Build TaskFiles for Harbor mode from the bundled in-container reference agent.
+
+    The reference agent and task overview describe the in-container contract; the
+    sample descriptions are real task instructions sampled from the benchmark.
+    """
+    shared = bundled_shared_dir()
+    reference_target_agent_py = Path(shared, Names.REFERENCE_HARBOR_AGENT).read_text()
+    with open(os.path.join(shared, Names.SHARED_SAMPLE_EXECUTION)) as f:
+        sample_agent_execution = json.load(f)
+
+    task_md = (
+        f"You are building ONE general-purpose agent to solve tasks from the Harbor "
+        f"benchmark '{benchmark}'. Your agent runs inside each task's Docker container "
+        f"and must leave the container in the state the task's verifier expects. Below "
+        f"are representative task instructions your agent must be able to handle:\n\n"
+        f"{sample_descriptions}"
+    )
+    return TaskFiles(
+        sample_task_descriptions=sample_descriptions,
+        reference_target_agent_py=reference_target_agent_py,
+        sample_agent_execution=sample_agent_execution,
+        task_md=task_md,
+    )
+
+
 def _create_venv(venv_dir: str, packages: list[str]) -> None:
     """Create a virtual environment and install packages."""
     if shutil.which("uv"):
@@ -150,11 +176,14 @@ def setup_run_directory(
     config: Config | None = None,
     meta_profile: MetaAgentProfile | None = None,
     target_profile: TargetAgentProfile | None = None,
+    create_venv: bool = True,
 ) -> RunSetup:
     """Create run directories, venv, and context manager.
 
     Args:
         focus: "harness" (default) or "weights" for RL-based tuning. Determines which packages are installed.
+        create_venv: when False, skip the local venv (Harbor mode runs the target agent in
+            the benchmark's own containers, so no local interpreter is needed).
     """
     cfg = config or Config()
     layout = RunLayout.for_run_id(run_id)
@@ -173,12 +202,13 @@ def setup_run_directory(
     os.makedirs(meta_agent_working_directory, exist_ok=False)
 
     venv_dir = layout.venv_dir
-    logger.info(f"Creating virtual environment at: {venv_dir}")
-    # Build packages list conditionally based on focus mode
-    packages = cfg.VENV_PACKAGES.copy()
-    if focus == "weights":
-        packages.extend(cfg.WEIGHTS_VENV_PACKAGES)
-    _create_venv(venv_dir, packages)
+    if create_venv:
+        logger.info(f"Creating virtual environment at: {venv_dir}")
+        # Build packages list conditionally based on focus mode
+        packages = cfg.VENV_PACKAGES.copy()
+        if focus == "weights":
+            packages.extend(cfg.WEIGHTS_VENV_PACKAGES)
+        _create_venv(venv_dir, packages)
 
     _write_run_profiles(run_directory, meta_profile, target_profile)
 

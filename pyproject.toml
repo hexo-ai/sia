@@ -37,6 +37,10 @@ claude = ["claude-agent-sdk>=0.1.50"]
 openhands = ["openhands-ai>=1.6.0"]
 pydantic-ai = ["pydantic-ai>=1.0"]
 mlebench = ["google-generativeai>=0.8"]
+# Harbor mode drives the `harbor` CLI as a subprocess (it ships its own interpreter),
+# so no Python dependency is pinned here. Install the CLI separately, e.g.
+# `uv tool install harbor`, or set SIA_HARBOR_BIN to its path.
+harbor = []
 dev = [
     "pytest>=7.0",
     "ruff>=0.11",

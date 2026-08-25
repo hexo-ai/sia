@@ -39,7 +39,7 @@ def _add_run_args(parser: argparse.ArgumentParser, env_config: Config) -> None:
         help="Maximum number of generations to run (default: 3)",
     )
     parser.add_argument("--run_id", type=int, default=1, help="Run ID for this experiment (default: 1)")
-    task_group = parser.add_mutually_exclusive_group(required=True)
+    task_group = parser.add_mutually_exclusive_group(required=False)
     task_group.add_argument(
         "--task",
         type=str,
@@ -50,6 +50,31 @@ def _add_run_args(parser: argparse.ArgumentParser, env_config: Config) -> None:
         "--task_dir",
         type=str,
         help="Path to an external task directory (e.g., ./tasks/my-task)",
+    )
+    parser.add_argument(
+        "--harbor_dataset",
+        type=str,
+        default=None,
+        help="Harbor benchmark to run on, e.g. 'terminal-bench-sample@2.0' (enables Harbor mode)",
+    )
+    parser.add_argument(
+        "--harbor_task_dir",
+        type=str,
+        default=None,
+        help="Path to a pre-downloaded Harbor benchmark directory (enables Harbor mode)",
+    )
+    parser.add_argument(
+        "--harbor_include_task",
+        action="append",
+        default=None,
+        metavar="TASK_NAME",
+        help="Restrict the Harbor run to these task name(s); repeatable",
+    )
+    parser.add_argument(
+        "--harbor_working_dir",
+        type=str,
+        default="/app",
+        help="Container working directory the agent operates in (default: /app)",
     )
     parser.add_argument(
         "--meta-agent-profile",

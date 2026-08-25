@@ -29,6 +29,7 @@ class Names:
     STDOUT_LOG = "target_agent_stdout.log"
     TRAIN_STDOUT_LOG = "train_stdout.log"
     EVAL_LOG = "evaluation.log"
+    HARBOR_RUN_LOG = "harbor_run.log"
     RESULTS_JSON = "results.json"
     CONTEXT_MD = "context.md"
     IMPROVEMENT_MD = "improvement.md"
@@ -47,7 +48,13 @@ class Names:
     REFERENCE_AGENT_FILE = "reference_target_agent.py"
     SAMPLE_TASK_DESCRIPTIONS = f"{REFERENCE_DIR}/SAMPLE_TASK_DESCRIPTIONS.md"
     REFERENCE_AGENT = f"{REFERENCE_DIR}/{REFERENCE_AGENT_FILE}"
+    REFERENCE_HARBOR_AGENT = "reference_harbor_agent.py"
     SHARED_DIR = "_shared"
+
+
+def bundled_shared_dir() -> str:
+    """Absolute path to the bundled ``sia/tasks/_shared`` directory."""
+    return str(resource_files("sia.tasks") / Names.SHARED_DIR)
 
 
 def venv_python_path(venv_dir: str) -> str:
