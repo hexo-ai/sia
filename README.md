@@ -1,32 +1,26 @@
 # SIA (Self-Improving AI)
 
 [![arXiv](https://img.shields.io/badge/arXiv-2605.27276-b31b1b.svg)](https://arxiv.org/abs/2605.27276)
+[![CI](https://github.com/hexo-ai/sia/actions/workflows/ci.yml/badge.svg)](https://github.com/hexo-ai/sia/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/sia-agent.svg)](https://pypi.org/project/sia-agent/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/sia-agent.svg)](https://pypi.org/project/sia-agent/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![PyPI version](https://img.shields.io/pypi/v/sia-agent.svg)](https://pypi.org/project/sia-agent/)
 
-<p align="center">
-  <a href="https://star-history.com/#hexo-ai/sia&Date">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hexo-ai/sia&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hexo-ai/sia&type=Date" />
-      <img alt="SIA Star History Chart" src="https://api.star-history.com/svg?repos=hexo-ai/sia&type=Date" width="600" />
-    </picture>
-  </a>
-</p>
+
 
 Official implementation of [**SIA: Self Improving AI with Harness & Weight Updates**](https://arxiv.org/abs/2605.27276) (Hebbar et al., 2026) — a self-improving loop where a language-model agent updates both the harness and the weights of a task-specific agent. The paper reports a 56.6% gain on LawBench, 91.9% runtime reduction on GPU kernels, and 502% improvement on single-cell RNA denoising over baseline.
 
 SIA is a Self Improving AI framework to autonomously improve the performance of any AI system (Model / Agent) on a benchmark task.
 
-> **Just want to try it?** Skip to [Run SIA locally](#2-run-sia-locally-with-built-in-tasks).
+> **Just want to try it?** Skip to [Run SIA locally](#run-sia-locally-with-built-in-tasks).
 
 ## Introduction Videos
 
 - [SIA setup](https://www.loom.com/share/be0534bc818d408bab937033c6457ec9)
 - [SIA Runs Visualizer](https://www.loom.com/share/5b1dc2dc858b4493b4b348f0b88d5b9e)
 
-### Architecture
+## Architecture
 
 <p align="center"><img src="docs/flow.png" alt="SIA orchestration flow" width="720"></p>
 <p align="center"><i>Control flow between Meta, Target, and Feedback agents over successive generations.</i></p>
@@ -41,7 +35,7 @@ SIA operates by coordinating three main types of AI agents that work together to
 This iterative process allows the system to autonomously refine and enhance its ability to solve scientific tasks.
 
 
-### Benchmark Results
+## Benchmark Results
 
 <p align="center"><img src="docs/mlebench.png" alt="MLE Bench Results" width="720"><br><i>OpenAI MLE-Bench Hard: a gauntlet of real Kaggle ML competitions where agents must write, run, and iterate full ML pipelines. SIA ranks #1 across all generations tested.</i></p>
 
@@ -49,7 +43,7 @@ This iterative process allows the system to autonomously refine and enhance its 
 
 <p align="center"><img src="docs/trimul_cuda.png" alt="TriMul CUDA Results" width="720"><br><i>AlphaFold-3 TriMul Triton Kernel: implement and optimize the Triangle Multiplicative Update as a Triton kernel, preserving correctness while hitting H100 latency targets. SIA-W+H achieves 14x speedup over baseline.</i></p>
 
-<p align="center"><img src="docs/denoising.png" alt="Denoising Results" width="720"><br><i>scRNA-seq Denoising: impute missing gene expression values in single-cell RNA sequencing data. SIA-W+H scores 0.289 MSE<sub>norm</sub>, surpassing the prior SOTA of 0.220.</i></p>
+<p align="center"><img src="docs/denoising.png" alt="Denoising Results" width="720"><br><i>scRNA-seq Denoising: impute missing gene expression values in single-cell RNA sequencing data. SIA-W+H scores 0.289 MSE<sub>norm</sub>, surpassing the prior SOTA of 0.240.</i></p>
 
 ---
 
@@ -102,6 +96,8 @@ Artifacts land in `runs/run_{run_id}/gen_{n}/`:
 
 While a run is in progress a **live dashboard** auto-starts at
 `http://127.0.0.1:8000` (disable with `--no-web`).
+
+**Security:** the default `--sandbox none` mode runs agent-generated code with host access. For untrusted tasks or models, use `--sandbox docker`, which isolates execution in a Docker container with no network access. See [SECURITY.md](SECURITY.md) for the full security model.
 
 ### Common flags (`sia run`)
 
@@ -255,6 +251,10 @@ python my-task/data/public/evaluate.py --gen-dir runs/run_1/gen_1   # should wri
 ```
 
 Full contract, return-format rules, and a complete example: [EVALUATION_GUIDE.md](EVALUATION_GUIDE.md).
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, test/lint/type-check commands, and guidance for adding new tasks.
 
 ---
 

@@ -1,0 +1,84 @@
+name: Feature request
+description: Suggest an improvement, new capability, or new task for SIA.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement to SIA. For larger changes, please describe the use case and proposed behavior before starting implementation work.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem would this solve, or what workflow would this improve?
+      placeholder: I want to use SIA to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior, API, CLI option, task support, documentation, or workflow you would like to see.
+      placeholder: Add support for...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project does this most closely affect?
+      options:
+        - CLI / user workflow
+        - agent implementation
+        - provider/model configuration
+        - task authoring
+        - evaluation
+        - web visualizer
+        - documentation
+        - packaging / installation
+        - security / sandboxing
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Are there workarounds or alternative approaches?
+      placeholder: Currently this can be worked around by...
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation notes
+      description: Share any implementation ideas, relevant files, or compatibility concerns.
+      placeholder: This may involve...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Are you interested in contributing this?
+      options:
+        - Yes, I can open a PR
+        - Maybe, with maintainer guidance
+        - No, I am only suggesting the idea
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra-context
+    attributes:
+      label: Additional context
+      description: Add links, examples, screenshots, related issues, or other context.
+    validations:
+      required: false
