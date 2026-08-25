@@ -17,19 +17,29 @@ def _resolve_model(model_name, provider=None):
 
     litellm derives the provider from the model string's prefix. For an
     OpenAI-compatible endpoint (a provider with ``client_kind == "openai"`` and a
-    ``base_url``), the model must carry an explicit ``openai/`` prefix so litellm
-    routes to that ``base_url`` instead of trying to parse the model's own namespace
-    (e.g. ``moonshotai/Kimi-K2.6``) as a provider. Already-prefixed and native
-    (anthropic) specs pass through unchanged.
+    ``base_url``), the model must carry an explicit routing prefix so litellm routes to
+    that ``base_url`` instead of trying to parse the model's own namespace (e.g.
+    ``moonshotai/Kimi-K2.6``) as a provider. Already-prefixed and native (anthropic)
+    specs pass through unchanged.
+
+    The prefix comes from the provider's ``litellm_prefix`` and defaults to ``openai``,
+    the generic OpenAI-compatible route. A gateway that litellm models as a first-class
+    provider should name it (``openrouter``) so litellm applies that provider's own
+    request transform: the generic OpenAI transform strips ``cache_control`` from every
+    message, which silently disables prompt caching.
     """
     if provider is None or not isinstance(model_name, str):
         return model_name
-    if provider.client_kind == "openai" and provider.base_url and not model_name.startswith("openai/"):
-        return f"openai/{model_name}"
+    if provider.client_kind == "openai" and provider.base_url:
+        prefix = provider.litellm_prefix or "openai"
+        if not model_name.startswith(f"{prefix}/"):
+            return f"{prefix}/{model_name}"
     return model_name
 
 
-async def run_agent_openhands(model_name, max_turns, prompt, agent_working_directory, provider=None):
+async def run_agent_openhands(
+    model_name, max_turns, prompt, agent_working_directory, provider=None, model_canonical_name=None
+):
     """Run agent using OpenHands SDK"""
     try:
         from openhands.sdk import LLM, Agent, Conversation, Tool
@@ -58,11 +68,26 @@ async def run_agent_openhands(model_name, max_turns, prompt, agent_working_direc
 
         # Create LLM instance. litellm needs an explicit provider prefix to route to a
         # custom OpenAI-compatible base_url (see _resolve_model).
+        #
+        # reasoning_effort is pinned to None deliberately. The SDK defaults it to "high",
+        # and litellm only forwards it for providers it reports as reasoning-capable -- so
+        # merely naming a gateway's litellm provider would silently switch the meta agent
+        # to extended thinking. Opting into that is a separate, measurable decision.
         llm = LLM(
             model=_resolve_model(model_name, provider),
+            model_canonical_name=model_canonical_name,
             api_key=api_key,
             base_url=base_url,
+            reasoning_effort=None,
         )
+        # The LLM model ignores unknown fields, so an SDK predating model_canonical_name
+        # would drop it and leave capability lookups (prompt caching, context window, cost)
+        # silently degraded rather than failing.
+        if model_canonical_name and getattr(llm, "model_canonical_name", None) != model_canonical_name:
+            logger.warning(
+                f"The installed OpenHands SDK ignored model_canonical_name={model_canonical_name!r}; "
+                "prompt caching and context-window detection will be degraded. Upgrade openhands-ai."
+            )
 
         # Create agent with available tools
         agent = Agent(

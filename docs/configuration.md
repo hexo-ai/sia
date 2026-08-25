@@ -55,9 +55,16 @@ Configuration is **declarative JSON** you can extend without touching code.
   "name": "Nebius Token Factory",                            // human-readable display name
   "client_kind": "openai",                                   // anthropic | openai | google
   "base_url": "https://api.tokenfactory.us-central1.nebius.com/v1/",
-  "api_key_env": "NEBIUS_API_KEY"
+  "api_key_env": "NEBIUS_API_KEY",
+  "litellm_prefix": "openrouter"                             // optional; see below
 }
 ```
+
+`litellm_prefix` (optional, `openai` by default) names the litellm provider the `openhands` agent
+impl routes through. Most OpenAI-compatible endpoints want the default. Set it when litellm models
+the gateway as a first-class provider — OpenRouter does — because the generic OpenAI transform
+**strips `cache_control` from every message**, silently disabling prompt caching, and cannot report
+usage or cost. Naming the provider fixes all three.
 
 Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`, `openrouter`.
 
@@ -72,9 +79,17 @@ A **meta-agent profile** bundles `(agent_impl, model, provider)`:
   "name": "Kimi K2.6 on Nebius",    // human-readable display name
   "agent_impl": "openhands",        // claude | openhands | pydantic-ai
   "model": "moonshotai/Kimi-K2.6",
-  "provider_id": "nebius"           // references a provider by its provider_id
+  "provider_id": "nebius",          // references a provider by its provider_id
+  "model_canonical_name": null      // optional; see below
 }
 ```
+
+`model_canonical_name` (optional) is the vendor's own model id, used **only** for SDK capability
+lookups — prompt caching, context window, cost — while `model` stays the routing id the gateway
+expects. Set it when the two differ: OpenRouter serves Anthropic's `claude-haiku-4-5` as
+`anthropic/claude-haiku-4.5`, and capability tables key on the hyphenated form, so without it
+caching stays off and the context window is undetected. **Change it whenever you change `model`** —
+a stale value applies the wrong model's capabilities, token limits and pricing.
 
 A **target-agent profile** bundles `(model, provider, agent_reference)` — no agent impl, because
 SIA never runs the target as an engine; it generates and improves the code:
@@ -173,12 +188,21 @@ sia run --task gpqa \
 Both bundled OpenRouter profiles use `anthropic/claude-haiku-4.5`. To swap models, copy them into
 `./profiles/` and change `model` to any [OpenRouter model id](https://openrouter.ai/models) —
 the id must keep its vendor namespace (`openai/gpt-oss-120b`, `google/gemini-3-flash-preview`,
-`qwen/qwen3-235b-a22b-2507`), since that is how OpenRouter routes.
+`qwen/qwen3-235b-a22b-2507`), since that is how OpenRouter routes. When you change `model` on the
+**meta** profile, update `model_canonical_name` to match the vendor's own id for that model, or
+delete it — leaving the old value applies the wrong model's capabilities and pricing.
 
 The meta agent cannot use the `claude` agent impl here (see below): OpenRouter is an
-OpenAI-compatible provider, so `openrouter-meta` uses `openhands`. LiteLLM prints a
-`Cost calculation failed: This model isn't mapped yet` warning and reports `$0.00` per turn —
-harmless, and consistent with every other non-native provider. Track real spend on the
+OpenAI-compatible provider, so `openrouter-meta` uses `openhands`.
+
+**Prompt caching is model-gated, not provider-gated.** OpenRouter only accepts Anthropic-style
+cache breakpoints for a subset of models — ids containing `claude`, `gemini`, `glm`, `minimax` or
+`z-ai`. Swapping the meta model to, say, `openai/gpt-oss-120b` routes and runs fine but caches
+nothing, so a long meta-agent loop re-sends its whole prefix every turn.
+
+Cost reporting reflects the **native vendor's** published prices, looked up via
+`model_canonical_name` — not OpenRouter's, which adds a fee and varies by route. Treat per-turn
+figures as an estimate and track real spend on the
 [OpenRouter activity page](https://openrouter.ai/activity).
 
 ### Pointing the meta/feedback agent at another provider

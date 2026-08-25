@@ -32,6 +32,12 @@ class Provider:
     client_kind: str  # "anthropic" | "openai" | "google"
     base_url: str | None  # None for native endpoints; set for OpenAI-compatible providers
     api_key_env: str
+    # litellm routing prefix the openhands agent impl should use for this endpoint. Defaults to
+    # "openai" (the generic OpenAI-compatible route). Gateways with a first-class litellm provider
+    # -- e.g. "openrouter" -- should name it here: litellm then applies that provider's own request
+    # transform instead of the generic one, which preserves prompt-cache breakpoints and returns
+    # usage/cost data. See sia.agent_impls.openhands._resolve_model.
+    litellm_prefix: str | None = None
 
 
 def available_providers() -> list[str]:
@@ -64,4 +70,5 @@ def load_provider(name_or_path: str) -> Provider:
         client_kind=client_kind,
         base_url=data.get("base_url"),
         api_key_env=data["api_key_env"],
+        litellm_prefix=data.get("litellm_prefix"),
     )

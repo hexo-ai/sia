@@ -38,6 +38,13 @@ class MetaAgentProfile:
     agent_impl: str  # a registered agent impl (claude / openhands / pydantic-ai)
     model: str
     provider: Provider
+    # Canonical model id used only for SDK capability lookups (prompt caching, context window,
+    # cost), separate from ``model``, which is the routing id the gateway expects. Set this when
+    # the gateway's id differs from the vendor's own -- e.g. OpenRouter serves Anthropic's
+    # "claude-haiku-4-5" as "anthropic/claude-haiku-4.5", and capability tables key on the former.
+    # Change it whenever you change ``model``: a stale value applies the wrong model's
+    # capabilities, token limits and pricing.
+    model_canonical_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,6 +94,7 @@ def load_meta_agent_profile(name_or_path: str) -> MetaAgentProfile:
         agent_impl=data["agent_impl"],
         model=data["model"],
         provider=provider,
+        model_canonical_name=data.get("model_canonical_name"),
     )
     _validate_meta(profile, source)
     return profile
