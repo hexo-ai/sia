@@ -21,6 +21,20 @@ IMPROVEMENT_MD = (
     "- Switched to a retry loop with exponential backoff for transient API errors.\n"
     "- Improved logging to capture each tool call and its result for later analysis.\n"
 )
+TRANSFER_EVIDENCE = {
+    "generation": 2,
+    "accepted_for_reuse": True,
+    "evaluator_status": "passed",
+    "score_delta": 25.0,
+    "reusable_changes": [
+        "Added structured error handling so the agent recovers from tool failures gracefully.",
+        "Improved logging to capture each tool call and its result for later analysis.",
+    ],
+    "task_specific_residue": ["The retry loop is task-specific to this evaluation harness."],
+    "unsupported_claims": ["No benchmark-portable claim was validated in this run."],
+    "negative_probe_hits": 0,
+    "claim_boundary": "Treat residue as task-specific context.",
+}
 
 
 @patch("sia.context_manager.ContextManager._generate_llm_summary", return_value=None)
@@ -36,6 +50,7 @@ def test_context_md_golden(_mock_llm, tmp_path):
     (gen2 / "improvement.md").write_text(IMPROVEMENT_MD)
     (gen1 / "results.json").write_text(json.dumps({"accuracy": 50.0, "correct": 99, "total": 198}))
     (gen2 / "results.json").write_text(json.dumps({"accuracy": 75.0, "correct": 148, "total": 198}))
+    (gen2 / "transfer_evidence.json").write_text(json.dumps(TRANSFER_EVIDENCE))
 
     cm = ContextManager(
         str(run_dir),
@@ -69,6 +84,7 @@ def test_context_md_golden(_mock_llm, tmp_path):
             "agent_path": str(gen2 / "target_agent.py"),
             "gen_dir": str(gen2),
             "improvement_path": str(gen2 / "improvement.md"),
+            "transfer_evidence_path": str(gen2 / "transfer_evidence.json"),
             "execution_type": "Single",
         },
     )

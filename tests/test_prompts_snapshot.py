@@ -64,4 +64,4 @@ def test_feedback_prompt_golden():
         previous_gens="1",
         task_model="claude-haiku-4-5-20251001",
     )
-    assert_golden("feedback_prompt.txt", prompt)
+    assert_golden("feedback_prompt.txt", prompt.replace("\\", "/"))

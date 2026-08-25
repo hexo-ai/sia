@@ -20,6 +20,95 @@ from sia.logging_setup import get_logger
 logger = get_logger(__name__)
 
 
+# Default pass-set for the verifier->feedback contract. A grader item whose `status`
+# is not in this set counts as a failure. Mirrors Config.VERIFIER_PASS_STATUSES; the
+# config field is read by the orchestrator wiring, this local default keeps
+# _extract_metrics self-contained when no config is threaded through.
+DEFAULT_VERIFIER_PASS_STATUSES: tuple[str, ...] = ("CORRECT", "PASS", "correct")
+
+# Caps on the bounded items summary so a large items array cannot bloat context.
+ITEMS_SUMMARY_MAX_GROUPS = 20
+ITEMS_SUMMARY_MAX_CATEGORIES = 20
+ITEMS_SUMMARY_MAX_WORST_IDS = 10
+
+
+def _is_failure(status: Any, pass_statuses: tuple[str, ...]) -> bool:
+    """A status counts as a failure when it is not in the pass-set."""
+    return status not in pass_statuses
+
+
+def summarize_items(
+    items: list[Any],
+    pass_statuses: tuple[str, ...] = DEFAULT_VERIFIER_PASS_STATUSES,
+) -> dict[str, Any]:
+    """Compute a bounded summary of a grader's optional `items` array.
+
+    Per the verifier->feedback contract, each item is an open dict in which three
+    keys are framework-recognized (all optional): `status`, `group`, `category`.
+    Returns counts that stay bounded regardless of array size:
+
+    - `total`: number of items
+    - `failures`: count of items whose status is not in the pass-set
+    - `status_counts`: per-status item counts (all statuses)
+    - `group_failure_counts`: per-group failure counts (capped, top groups by failures)
+    - `category_counts`: per-failure-category counts (capped, top categories)
+    - `worst_ids`: ids of the first failing items (capped)
+
+    Non-dict items are ignored. When an item has no `category`, a coarse category is
+    derived from its status so the digest still has a category dimension.
+    """
+    status_counts: dict[str, int] = {}
+    group_failures: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
+    worst_ids: list[str] = []
+    failures = 0
+    total = 0
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        total += 1
+        status = item.get("status")
+        status_key = str(status) if status is not None else "UNKNOWN"
+        status_counts[status_key] = status_counts.get(status_key, 0) + 1
+
+        if not _is_failure(status, pass_statuses):
+            continue
+
+        failures += 1
+
+        group = item.get("group")
+        if group is not None:
+            group_key = str(group)
+            group_failures[group_key] = group_failures.get(group_key, 0) + 1
+
+        category = item.get("category")
+        category_key = str(category) if category is not None else f"status:{status_key}"
+        category_counts[category_key] = category_counts.get(category_key, 0) + 1
+
+        if len(worst_ids) < ITEMS_SUMMARY_MAX_WORST_IDS:
+            item_id = item.get("id", item.get("question_id"))
+            if item_id is not None:
+                worst_ids.append(str(item_id))
+
+    return {
+        "total": total,
+        "failures": failures,
+        "status_counts": status_counts,
+        "group_failure_counts": _top_n(group_failures, ITEMS_SUMMARY_MAX_GROUPS),
+        "category_counts": _top_n(category_counts, ITEMS_SUMMARY_MAX_CATEGORIES),
+        "worst_ids": worst_ids,
+    }
+
+
+def _top_n(counts: dict[str, int], cap: int) -> dict[str, int]:
+    """Return the `cap` highest-count entries, ordered by count desc then key."""
+    if len(counts) <= cap:
+        return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:cap]
+    return dict(ranked)
+
+
 class ContextManager:
     """Manages context.md for tracking generation evolution in a run"""
 
@@ -220,6 +309,7 @@ class ContextManager:
                 - agent_path: str, path to target_agent.py
                 - gen_dir: str, path to generation directory
                 - improvement_path: Optional[str], path to improvement.md
+                - transfer_evidence_path: Optional[str], path to transfer_evidence.json
                 - execution_type: str, 'Single' or 'Multi-trajectory'
         """
         # Extract agent stats
@@ -237,16 +327,30 @@ class ContextManager:
         # Extract metrics
         metrics = self._extract_metrics(gen_data["gen_dir"])
 
-        # Extract insights from improvement.md (if exists)
+        # Prefer transfer_evidence.json when available, fallback to improvement.md
+        transfer_evidence = self._load_transfer_evidence(gen_data.get("transfer_evidence_path"))
         insights = []
-        if gen_data.get("improvement_path") and os.path.exists(gen_data["improvement_path"]):
+        if (
+            transfer_evidence is None
+            and gen_data.get("improvement_path")
+            and os.path.exists(gen_data["improvement_path"])
+        ):
             insights = self._extract_insights(gen_data["improvement_path"])
 
         # Generate LLM summary of changes and improvements
         llm_summary = self._generate_llm_summary(gen_num, gen_data, metrics)
 
         # Format entry
-        entry = self._format_generation_entry(gen_num, gen_data, agent_stats, deltas, metrics, insights, llm_summary)
+        entry = self._format_generation_entry(
+            gen_num=gen_num,
+            gen_data=gen_data,
+            stats=agent_stats,
+            deltas=deltas,
+            metrics=metrics,
+            insights=insights,
+            llm_summary=llm_summary,
+            transfer_evidence=transfer_evidence,
+        )
 
         # Append to file
         with open(self.context_path, "a", encoding="utf-8") as f:
@@ -263,6 +367,14 @@ class ContextManager:
         )
 
         logger.info(f"Added Generation {gen_num} to context.md")
+
+    def _load_transfer_evidence(self, transfer_evidence_path: str | None) -> dict[str, Any] | None:
+        if transfer_evidence_path is None:
+            return None
+        evidence = _safe_load_json(transfer_evidence_path)
+        if not isinstance(evidence, dict):
+            return None
+        return evidence
 
     def finalize(self):
         """Add summary statistics at the end of context.md"""
@@ -355,8 +467,12 @@ class ContextManager:
                     elif isinstance(value, dict):
                         # Skip other nested dicts
                         continue
+                    elif key == "items" and isinstance(value, list) and len(value) > 0:
+                        # Verifier->feedback contract: retain a bounded summary of the
+                        # optional grader `items` array instead of dropping it.
+                        metrics["items_summary"] = summarize_items(value)
                     elif isinstance(value, list) and len(value) > 0:
-                        # Skip lists
+                        # Skip other lists
                         continue
 
         # Priority 2: detailed_results.json
@@ -459,6 +575,7 @@ class ContextManager:
         deltas: dict[str, float],
         metrics: dict[str, Any],
         insights: list[str],
+        transfer_evidence: dict[str, Any] | None = None,
         llm_summary: str | None = None,
     ) -> str:
         """Format markdown entry for a generation"""
@@ -489,7 +606,42 @@ class ContextManager:
 - File size: {stats["size"]:,} bytes ({delta_size_str})
 - Lines: {stats["lines"]} ({delta_lines_str} lines)
 """
-            if insights:
+            if transfer_evidence:
+                entry += "- Transfer evidence carryover:\n"
+                entry += f"  * Reuse boundary: {transfer_evidence.get('claim_boundary', 'Reuse boundary follows the card.')}\n"
+                accepted_for_reuse = transfer_evidence.get("accepted_for_reuse")
+                if isinstance(accepted_for_reuse, bool):
+                    entry += f"  * Accepted for reuse: {'yes' if accepted_for_reuse else 'no'}\n"
+                reusable = transfer_evidence.get("reusable_changes", [])
+                if isinstance(reusable, list) and reusable:
+                    reusable_label = (
+                        "  * Reusable guidance:\n"
+                        if accepted_for_reuse is not False
+                        else "  * Candidate changes rejected for reuse:\n"
+                    )
+                    entry += reusable_label
+                    for item in reusable[:3]:
+                        if not isinstance(item, str):
+                            continue
+                        entry += f"    * {item}\n"
+                residue = transfer_evidence.get("task_specific_residue", [])
+                if isinstance(residue, list) and residue:
+                    entry += "  * Residue / caution (not safe to reuse):\n"
+                    for item in residue[:3]:
+                        if not isinstance(item, str):
+                            continue
+                        entry += f"    * {item}\n"
+                unsupported = transfer_evidence.get("unsupported_claims", [])
+                if isinstance(unsupported, list) and unsupported:
+                    entry += "  * Unsupported claim notes:\n"
+                    for item in unsupported[:3]:
+                        if not isinstance(item, str):
+                            continue
+                        entry += f"    * {item}\n"
+                score_delta = transfer_evidence.get("score_delta")
+                if isinstance(score_delta, (int, float)):
+                    entry += f"  * Score change: {score_delta:+.4f}\n"
+            elif insights:
                 entry += "- Key changes from improvement.md:\n"
                 for insight in insights[:3]:
                     # Truncate very long insights

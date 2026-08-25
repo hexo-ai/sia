@@ -1,8 +1,9 @@
 ===== EXECUTION STATUS =====
 FAILED: Target agent failed with exit code 1
-
 **EVALUATION RESULTS**: No results.json found (evaluation may not have run or may have failed)
 
+**TRANSFER EVIDENCE**:
+No transfer_evidence.json found. No reusable guidance boundary is available yet.
 
 **Last 10 lines of output**:
 ```

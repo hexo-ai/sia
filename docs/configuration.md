@@ -281,6 +281,33 @@ sia run --task gpqa --max_gen 5 --run_id 1 --focus weights --training_sandbox sa
 `SIA_META_AGENT_PROFILE` / `SIA_TARGET_AGENT_PROFILE` set the default profile names (overridden by
 the CLI flags). `SIA_MAX_GENERATIONS`, `SIA_MAX_TURNS`, and `SIA_SANDBOX_MODE` are also honored.
 
+### Held-out feedback summary
+
+The feedback agent is shown a curated, **reference-answer-free** summary of the held-out
+evaluation rather than the raw `results.json` (which can carry the grader's ground-truth
+answers — a reward-hacking surface). The summary includes every scalar metric the grader emits,
+at any nesting depth (e.g. top-level `accuracy`/`correct`/`total`, or a nested `summary` block);
+every list is dropped, since per-item record arrays such as `results`/`details` are where
+reference answers live. When the grader opts in by writing a generic `items[]` array, the summary
+also adds a capped, reference-answer-free sample of the **failed** items. Two variables tune that
+sample:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `SIA_VERIFIER_PASS_STATUSES` | `CORRECT,PASS,correct` | Comma-separated set of `items[]` `status` values that count as **passing**. Any other status is treated as a failure when selecting which items to surface. Set this when your grader uses a different status vocabulary (e.g. `OK,GREEN`). |
+| `SIA_FEEDBACK_FAILURE_SAMPLES` | `20` | Maximum number of failed held-out items included in the summary (diversified across `status` and `group`). Caps the feedback prompt size for large eval sets. |
+| `SIA_PRIVATE_DIR_GUARD` | `1` (on) | OS-level backstop: while a meta/feedback agent runs, strip all filesystem permissions on the task's `<task_dir>/data/private` dir so a read fails at the filesystem layer (impl-agnostic, covers the agent impls that ignore the claude-only tool-call guard). The original mode is restored when the agent run ends, including on error. Set `0` to disable. |
+
+The `items[]` contract is opt-in and gold-free by design: a grader emits one dict per item with
+any of the generic keys `id` / `status` / `group` / `category` / `input` / `output` / `detail`
+(no reference answer). Graders that don't emit `items[]` simply get the scalar summary. The
+held-out directory `<task_dir>/data/private` is additionally protected during meta/feedback agent
+runs by two complementary mechanisms: a `claude`-impl tool-call guard that denies file/Bash access
+resolving inside it, and an impl-agnostic OS-level guard (`SIA_PRIVATE_DIR_GUARD`, on by default)
+that strips its filesystem permissions for the duration of the run. Both are defense-in-depth
+behind the primary seal (the curated, reference-answer-free summary above); container-level
+sandboxing (`--sandbox docker`) remains the strongest boundary against a determined agent.
+
 ## Notes
 
 - The `claude` agent impl only accepts the Claude shortcut names (`haiku`, `sonnet`, `opus`) and an

@@ -10,9 +10,10 @@ You are an expert AI Engineer analyzing agent scaffolds for iterative improvemen
    - What improvements were tried in each previous generation
    - Performance trends across generations
    - What worked and what didn't work
-2. Review previous improvement.md files from earlier generations if helpful
-3. Don't repeat failed approaches from earlier generations
-4. Build upon successful patterns that improved performance
+2. Read /RUN/run_1/gen_2/transfer_evidence.json and treat residue as non-reusable context
+3. Review previous improvement.md files from earlier generations if helpful
+4. Don't repeat failed approaches from earlier generations
+5. Build upon successful patterns that improved performance
 
 ---
 
@@ -84,5 +85,6 @@ Follow these steps:
 - Consider error handling, logging mechanisms, and robustness
 - Build upon successful patterns from previous generations (check context.md)
 - If execution log shows errors or is incomplete, suggest improvements to ensure proper logging
+- HELD-OUT EVALUATION INTEGRITY: The task's held-out evaluation ground truth lives in a private directory used only by the grader. You MUST NOT read, list, glob, or otherwise access it — improve solely from the feedback provided. Such access is blocked and would invalidate the experiment.
 
 NOTE: The agent execution log may be incomplete or contain errors if the target agent crashed. If you see an "error" field, focus on making the agent more robust to prevent such failures.
