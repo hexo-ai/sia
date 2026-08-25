@@ -20,6 +20,95 @@ from sia.logging_setup import get_logger
 logger = get_logger(__name__)
 
 
+# Default pass-set for the verifier->feedback contract. A grader item whose `status`
+# is not in this set counts as a failure. Mirrors Config.VERIFIER_PASS_STATUSES; the
+# config field is read by the orchestrator wiring, this local default keeps
+# _extract_metrics self-contained when no config is threaded through.
+DEFAULT_VERIFIER_PASS_STATUSES: tuple[str, ...] = ("CORRECT", "PASS", "correct")
+
+# Caps on the bounded items summary so a large items array cannot bloat context.
+ITEMS_SUMMARY_MAX_GROUPS = 20
+ITEMS_SUMMARY_MAX_CATEGORIES = 20
+ITEMS_SUMMARY_MAX_WORST_IDS = 10
+
+
+def _is_failure(status: Any, pass_statuses: tuple[str, ...]) -> bool:
+    """A status counts as a failure when it is not in the pass-set."""
+    return status not in pass_statuses
+
+
+def summarize_items(
+    items: list[Any],
+    pass_statuses: tuple[str, ...] = DEFAULT_VERIFIER_PASS_STATUSES,
+) -> dict[str, Any]:
+    """Compute a bounded summary of a grader's optional `items` array.
+
+    Per the verifier->feedback contract, each item is an open dict in which three
+    keys are framework-recognized (all optional): `status`, `group`, `category`.
+    Returns counts that stay bounded regardless of array size:
+
+    - `total`: number of items
+    - `failures`: count of items whose status is not in the pass-set
+    - `status_counts`: per-status item counts (all statuses)
+    - `group_failure_counts`: per-group failure counts (capped, top groups by failures)
+    - `category_counts`: per-failure-category counts (capped, top categories)
+    - `worst_ids`: ids of the first failing items (capped)
+
+    Non-dict items are ignored. When an item has no `category`, a coarse category is
+    derived from its status so the digest still has a category dimension.
+    """
+    status_counts: dict[str, int] = {}
+    group_failures: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
+    worst_ids: list[str] = []
+    failures = 0
+    total = 0
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        total += 1
+        status = item.get("status")
+        status_key = str(status) if status is not None else "UNKNOWN"
+        status_counts[status_key] = status_counts.get(status_key, 0) + 1
+
+        if not _is_failure(status, pass_statuses):
+            continue
+
+        failures += 1
+
+        group = item.get("group")
+        if group is not None:
+            group_key = str(group)
+            group_failures[group_key] = group_failures.get(group_key, 0) + 1
+
+        category = item.get("category")
+        category_key = str(category) if category is not None else f"status:{status_key}"
+        category_counts[category_key] = category_counts.get(category_key, 0) + 1
+
+        if len(worst_ids) < ITEMS_SUMMARY_MAX_WORST_IDS:
+            item_id = item.get("id", item.get("question_id"))
+            if item_id is not None:
+                worst_ids.append(str(item_id))
+
+    return {
+        "total": total,
+        "failures": failures,
+        "status_counts": status_counts,
+        "group_failure_counts": _top_n(group_failures, ITEMS_SUMMARY_MAX_GROUPS),
+        "category_counts": _top_n(category_counts, ITEMS_SUMMARY_MAX_CATEGORIES),
+        "worst_ids": worst_ids,
+    }
+
+
+def _top_n(counts: dict[str, int], cap: int) -> dict[str, int]:
+    """Return the `cap` highest-count entries, ordered by count desc then key."""
+    if len(counts) <= cap:
+        return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:cap]
+    return dict(ranked)
+
+
 class ContextManager:
     """Manages context.md for tracking generation evolution in a run"""
 
@@ -355,8 +444,12 @@ class ContextManager:
                     elif isinstance(value, dict):
                         # Skip other nested dicts
                         continue
+                    elif key == "items" and isinstance(value, list) and len(value) > 0:
+                        # Verifier->feedback contract: retain a bounded summary of the
+                        # optional grader `items` array instead of dropping it.
+                        metrics["items_summary"] = summarize_items(value)
                     elif isinstance(value, list) and len(value) > 0:
-                        # Skip lists
+                        # Skip other lists
                         continue
 
         # Priority 2: detailed_results.json
