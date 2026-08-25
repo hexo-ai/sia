@@ -1,0 +1,7 @@
+{
+  "profile_id": "openrouter-target",
+  "name": "OpenRouter target agent (Claude Haiku 4.5)",
+  "model": "anthropic/claude-haiku-4.5",
+  "provider_id": "openrouter",
+  "agent_reference": "default"
+}
