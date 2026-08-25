@@ -32,6 +32,8 @@ TINKER_BASE_URL = "https://tinker.thinkingmachines.dev/services/tinker-prod/oai/
 DATASET_LABEL = "diamond_qna"
 CONCURRENCY = 5
 MODEL_PRICING = {"input": 0.0, "output": 0.0}
+REQUEST_TIMEOUT = 60.0
+MAX_RETRIES = 2
 
 
 # -----------------------------------------------------------------------------
@@ -52,7 +54,7 @@ def setup_client() -> AsyncOpenAI:
     api_key = os.getenv("TINKER_API_KEY")
     if not api_key:
         raise SystemExit("Set TINKER_API_KEY environment variable.")
-    return AsyncOpenAI(api_key=api_key, base_url=TINKER_BASE_URL)
+    return AsyncOpenAI(api_key=api_key, base_url=TINKER_BASE_URL, timeout=REQUEST_TIMEOUT)
 
 
 # -----------------------------------------------------------------------------
@@ -125,13 +127,14 @@ async def get_answer_async(
             model_answer_raw, model_answer = "", ""
             input_tokens, output_tokens = 0, 0
 
-            for attempt in range(3):
+            for attempt in range(MAX_RETRIES + 1):
                 try:
                     response = await client.chat.completions.create(
                         model=MODEL_NAME,
                         messages=[{"role": "user", "content": prompt}],
                         temperature=0.0,
                         max_tokens=1000,
+                        timeout=REQUEST_TIMEOUT,
                         # Some models might not support json_object mode, but Tinker usually does
                         response_format={"type": "json_object"}
                     )
@@ -148,7 +151,7 @@ async def get_answer_async(
                     output_tokens = usage.completion_tokens
                     break
                 except Exception as e:
-                    if attempt == 2:
+                    if attempt == MAX_RETRIES:
                         raise
                     await asyncio.sleep(2**attempt)
             

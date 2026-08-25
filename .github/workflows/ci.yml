@@ -91,6 +91,10 @@ jobs:
         run: |
           uv pip install --system ruff ty
 
+      - name: Install package
+        run: |
+          uv pip install --system -e ".[dev]"
+
       - name: Ruff check
         run: ruff check sia/ tests/
 

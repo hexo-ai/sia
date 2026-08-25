@@ -1,6 +1,7 @@
 """Tests for the agent-impl registry and the PydanticAI agent impl."""
 
 import asyncio
+import json
 
 import pytest
 
@@ -55,6 +56,77 @@ def test_pydantic_ai_model_passthrough():
     assert _resolve_model("anthropic:claude-sonnet-4-5") == "anthropic:claude-sonnet-4-5"
     # No provider -> still a plain passthrough.
     assert _resolve_model("openai:gpt-4o", None) == "openai:gpt-4o"
+
+
+def test_pydantic_ai_openrouter_uses_native_provider(monkeypatch):
+    pytest.importorskip("pydantic_ai")
+    from sia.agent_impls.pydantic_ai import _resolve_model
+    from sia.providers import Provider
+
+    monkeypatch.setenv("OPENROUTER_TEST_KEY", "test-key")
+    provider = Provider(
+        provider_id="openrouter",
+        name="OpenRouter",
+        client_kind="openai",
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_TEST_KEY",
+    )
+
+    model = _resolve_model("z-ai/glm-5.2", provider)
+    assert model.system == "openrouter"
+    assert model.base_url.rstrip("/") == "https://openrouter.ai/api/v1"
+
+
+def test_pydantic_ai_openai_compatible_provider_requires_configured_api_key(monkeypatch):
+    from sia.agent_impls.pydantic_ai import _resolve_model
+    from sia.providers import Provider
+
+    monkeypatch.delenv("SIA_MISSING_TEST_KEY", raising=False)
+    provider = Provider(
+        provider_id="custom",
+        name="Custom",
+        client_kind="openai",
+        base_url="https://example.test/v1",
+        api_key_env="SIA_MISSING_TEST_KEY",
+    )
+
+    with pytest.raises(RuntimeError, match="SIA_MISSING_TEST_KEY"):
+        _resolve_model("custom/model", provider)
+
+
+def test_pydantic_ai_impl_wraps_malformed_provider_json(tmp_path, monkeypatch):
+    pytest.importorskip("pydantic_ai")
+    import pydantic_ai
+
+    from sia.agent_impls.pydantic_ai import MalformedProviderResponseError, run_agent_pydantic_ai
+    from sia.providers import Provider
+
+    class BoomAgent:
+        def __init__(self, model, tools):
+            self.model = model
+            self.tools = tools
+
+        async def run(self, prompt, usage_limits):
+            raise json.JSONDecodeError("Expecting value", "not-json", 0)
+
+    monkeypatch.setattr(pydantic_ai, "Agent", BoomAgent)
+    monkeypatch.setenv("OPENROUTER_TEST_KEY", "test-key")
+    provider = Provider(
+        provider_id="openrouter",
+        name="OpenRouter",
+        client_kind="openai",
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_TEST_KEY",
+    )
+
+    with pytest.raises(MalformedProviderResponseError) as exc_info:
+        asyncio.run(run_agent_pydantic_ai("z-ai/glm-5.2", "5", "prompt", str(tmp_path), provider=provider))
+
+    message = str(exc_info.value)
+    assert "Provider returned a 200 response body" in message
+    assert "z-ai/glm-5.2" in message
+    assert "OpenRouter" in message
+    assert "$OPENROUTER_TEST_KEY" in message
 
 
 def test_openhands_model_gets_openai_prefix_for_compatible_provider():
