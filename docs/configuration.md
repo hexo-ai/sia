@@ -59,7 +59,7 @@ Configuration is **declarative JSON** you can extend without touching code.
 }
 ```
 
-Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`.
+Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`, `openrouter`.
 
 ### Profiles — one per agent role
 
@@ -101,6 +101,8 @@ Bundled profiles:
 | `default-target` | target | `agent_reference: default` | `claude-haiku-4-5-20251001` | `anthropic` |
 | `kimi-nebius-meta` | meta | `agent_impl: openhands` | `moonshotai/Kimi-K2.6` | `nebius` |
 | `kimi-nebius-target` | target | `agent_reference: default` | `moonshotai/Kimi-K2.6` | `nebius` |
+| `openrouter-meta` | meta | `agent_impl: openhands` | `anthropic/claude-haiku-4.5` | `openrouter` |
+| `openrouter-target` | target | `agent_reference: default` | `anthropic/claude-haiku-4.5` | `openrouter` |
 
 ### agent_reference — the target agent's seed code + deps
 
@@ -154,6 +156,31 @@ sia run --task gpqa --target-agent-profile kimi-nebius-target --max_gen 5 --run_
 The meta-agent refactors the reference agent to call the `openai` SDK at the Nebius
 `base_url` with `NEBIUS_API_KEY` (dollar-cost is reported as 0 — per-provider pricing is unknown).
 
+### One OpenRouter key for both agents
+
+OpenRouter is an OpenAI-compatible gateway to 400+ models, so a single key covers the meta
+agent *and* the target agent — useful when you don't want a separate account per provider:
+
+```bash
+pip install 'sia-agent[openhands]'   # the meta profile uses the openhands agent impl
+export OPENROUTER_API_KEY="..."      # both agents
+sia run --task gpqa \
+        --meta-agent-profile openrouter-meta \
+        --target-agent-profile openrouter-target \
+        --max_gen 5 --run_id 3
+```
+
+Both bundled OpenRouter profiles use `anthropic/claude-haiku-4.5`. To swap models, copy them into
+`./profiles/` and change `model` to any [OpenRouter model id](https://openrouter.ai/models) —
+the id must keep its vendor namespace (`openai/gpt-oss-120b`, `google/gemini-3-flash-preview`,
+`qwen/qwen3-235b-a22b-2507`), since that is how OpenRouter routes.
+
+The meta agent cannot use the `claude` agent impl here (see below): OpenRouter is an
+OpenAI-compatible provider, so `openrouter-meta` uses `openhands`. LiteLLM prints a
+`Cost calculation failed: This model isn't mapped yet` warning and reports `$0.00` per turn —
+harmless, and consistent with every other non-native provider. Track real spend on the
+[OpenRouter activity page](https://openrouter.ai/activity).
+
 ### Pointing the meta/feedback agent at another provider
 
 The `claude` agent impl is Anthropic-only (a profile pairing `agent_impl: claude` with a non-anthropic
@@ -185,6 +212,7 @@ export GEMINI_API_KEY="..."      # gemini provider  (or GOOGLE_API_KEY via openh
 export OPENAI_API_KEY="..."      # openai provider
 export TOGETHER_API_KEY="..."    # together provider
 export NEBIUS_API_KEY="..."      # nebius provider
+export OPENROUTER_API_KEY="..."  # openrouter provider (one key, 400+ models)
 ```
 
 ## Comparing multiple LLMs on the same task

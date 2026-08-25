@@ -1,0 +1,7 @@
+{
+  "profile_id": "openrouter-meta",
+  "name": "OpenRouter meta agent (Claude Haiku 4.5, OpenHands)",
+  "agent_impl": "openhands",
+  "model": "anthropic/claude-haiku-4.5",
+  "provider_id": "openrouter"
+}
