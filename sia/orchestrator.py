@@ -47,6 +47,7 @@ import glob
 import json
 import os
 import subprocess
+import threading
 import time
 import traceback
 from datetime import datetime
@@ -294,7 +295,18 @@ def _stream_to_log(cmd: list[str], stdout_log_file: str, env: dict | None = None
     Returns the process exit code. This is the single place the target agent
     subprocess is launched; the Popen call stays in this module's namespace so it
     remains patchable in tests.
+
+    If ``SIA_TARGET_TIMEOUT`` is set to a positive number of seconds, the process
+    is killed after that long. The deadline is enforced from outside the process
+    because a target agent that deadlocks cannot enforce its own: an agent we
+    watched set three internal timeouts and still hung, since all three lived
+    inside the loop that had stopped. Unset (the default), behaviour is unchanged.
     """
+    try:
+        deadline = float(os.environ.get("SIA_TARGET_TIMEOUT", "") or 0)
+    except ValueError:
+        deadline = 0.0
+
     with open(stdout_log_file, "w", encoding="utf-8") as log_fh:
         process = subprocess.Popen(
             cmd,
@@ -303,10 +315,29 @@ def _stream_to_log(cmd: list[str], stdout_log_file: str, env: dict | None = None
             text=True,
             env=env,
         )
-        for line in process.stdout:
-            print(line, end="")
-            log_fh.write(line)
-        return process.wait()
+
+        timer = None
+        if deadline > 0:
+            def _kill_hung() -> None:
+                if process.poll() is None:
+                    msg = (f"\n[sia] target agent exceeded SIA_TARGET_TIMEOUT="
+                           f"{deadline:.0f}s; terminating.\n")
+                    print(msg, end="")
+                    log_fh.write(msg)
+                    process.kill()
+
+            timer = threading.Timer(deadline, _kill_hung)
+            timer.daemon = True
+            timer.start()
+
+        try:
+            for line in process.stdout:
+                print(line, end="")
+                log_fh.write(line)
+            return process.wait()
+        finally:
+            if timer is not None:
+                timer.cancel()
 
 
 def _run_target_agent_sandboxed(
