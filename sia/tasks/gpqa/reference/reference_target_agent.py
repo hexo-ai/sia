@@ -103,7 +103,23 @@ def parse_answer_letter(model_answer_raw: str) -> str:
     if match:
         return match.group(1)
 
-    return next((letter for letter in "ABCD" if letter in answer), "")
+    # A few more shapes the model actually produces: "FINAL ANSWER - B",
+    # "**C**", "(D)", or a reply that is nothing but the letter and punctuation.
+    for pattern in (r'FINAL ANSWER\s*[:\-]?\s*\(?\*{0,2}([ABCD])',
+                    r'\*\*\s*([ABCD])\s*\*\*',
+                    r'\(\s*([ABCD])\s*\)',
+                    r'^\W*([ABCD])\W*$'):
+        match = re.search(pattern, answer, re.MULTILINE)
+        if match:
+            return match.group(1)
+
+    # No stated answer. Return "" rather than scanning the text for a bare
+    # letter: `next(l for l in "ABCD" if l in answer)` matches letters inside
+    # ordinary words, so any reply containing "A" -- including a refusal or an
+    # error message -- scores as "A". That silently converts unanswered items
+    # into confident wrong answers, and the harness cannot tell the difference
+    # afterwards. An empty string is a measurable abstention; a guess is not.
+    return ""
 
 
 # -----------------------------------------------------------------------------
