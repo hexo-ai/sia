@@ -551,6 +551,90 @@ STDERR:
     return FeedbackContext(execution_status, execution_section).as_tuple()
 
 
+def _cluster_failures(run_dir: str, current_gen: int) -> str:
+    """Analyze failure patterns from the current generation."""
+    gen_dir = os.path.join(run_dir, f"gen_{current_gen}")
+    lines = []
+    stdout_log = os.path.join(gen_dir, "target_agent_stdout.log")
+    if os.path.exists(stdout_log):
+        try:
+            with open(stdout_log, encoding="utf-8") as f:
+                content = f.read()
+            fmt_errors = content.count("Could not extract valid charge")
+            if fmt_errors > 0:
+                lines.append(f"  - [format_error x{fmt_errors}] Output could not be parsed as valid charge — fix parsing")
+        except OSError:
+            pass
+    results_path = os.path.join(gen_dir, "results.json")
+    if os.path.exists(results_path):
+        try:
+            with open(results_path, encoding="utf-8") as f:
+                data = json.load(f)
+            per_class = data.get("per_class", {})
+            if per_class:
+                zero = [k for k, v in per_class.items() if v == 0.0]
+                low = [k for k, v in per_class.items() if 0 < v <= 0.2]
+                high = [k for k, v in per_class.items() if v >= 0.8]
+                lines.append(f"  - [zero_accuracy x{len(zero)}] {len(zero)} classes at 0% — never predicted correctly")
+                if low:
+                    lines.append(f"  - [low_accuracy x{len(low)}] {len(low)} classes below 20%")
+                if high:
+                    lines.append(f"  - [strong_classes x{len(high)}] {len(high)} classes above 80% — preserve these")
+                worst = sorted([(k, v) for k, v in per_class.items() if v < 0.5], key=lambda x: x[1])[:3]
+                if worst:
+                    lines.append(f"  - [top_failures] Worst: {', '.join([f'{k}({v:.0%})' for k, v in worst])}")
+        except (OSError, json.JSONDecodeError):
+            pass
+    return "\n".join(lines) if lines else "  - No failure patterns detected"
+
+
+def _update_structured_memory(run_dir: str, current_gen: int, eval_results: dict, execution_success: bool) -> None:
+    """Append a structured entry to memory.md after each generation."""
+    memory_path = os.path.join(run_dir, "memory.md")
+    scores = []
+    for g in range(1, current_gen + 1):
+        r = os.path.join(run_dir, f"gen_{g}", "results.json")
+        if os.path.exists(r):
+            try:
+                with open(r) as f:
+                    d = json.load(f)
+                score = d.get("accuracy") or d.get("score")
+                if score is not None:
+                    scores.append((g, float(str(score).rstrip("%"))))
+            except (OSError, json.JSONDecodeError, ValueError):
+                pass
+    current_score = scores[-1][1] if scores else None
+    prev_score = scores[-2][1] if len(scores) >= 2 else None
+    delta = (current_score - prev_score) if (current_score is not None and prev_score is not None) else None
+    failure_tag = None
+    if not execution_success:
+        failure_tag = "crash_error"
+    elif delta is not None and delta < 0:
+        failure_tag = "regression"
+    score_str = f"{current_score:.2f}" if current_score is not None else "N/A"
+    delta_str = f"{delta:+.2f}" if delta is not None else "N/A"
+    status = "✓ SUCCESS" if execution_success else "✗ FAILED"
+    failure_clusters = _cluster_failures(run_dir, current_gen)
+    header = ""
+    if not os.path.exists(memory_path):
+        header = "# Structured Memory\nThis file is injected into every feedback prompt.\n\n---\n\n## ⛔ DO NOT REPEAT — failed approaches:\n\n## ✅ DO NOT REMOVE — confirmed wins:\n\n"
+    entry = f"### Gen {current_gen} — score: {score_str} (Δ {delta_str}) — {status}\n"
+    if failure_tag == "regression" and delta is not None:
+        entry += f"- ⛔ [regression] Score dropped {delta:.2f} — review what was removed from gen {current_gen - 1}\n"
+    elif failure_tag == "crash_error":
+        entry += "- ⛔ [crash_error] Agent crashed — fix before adding new features\n"
+    elif delta is not None and delta > 0:
+        entry += f"- ✅ [improvement +{delta:.2f}] Changes in gen {current_gen} improved score — preserve these\n"
+    else:
+        entry += "- No score change detected\n"
+    entry += f"- 🔍 Failure clusters:\n{failure_clusters}\n\n"
+    mode = "a" if os.path.exists(memory_path) else "w"
+    with open(memory_path, mode, encoding="utf-8") as f:
+        if mode == "w":
+            f.write(header)
+        f.write(entry)
+
+
 def _run_feedback_agent(
     current_gen: int,
     max_gen: int,
@@ -693,7 +777,7 @@ def run_generation(
     # Run evaluation (if evaluate.py exists)
     logger.info("=" * 60)
     logger.info("Running evaluation (if available)...")
-    run_evaluation(gen_dir, dataset_dir, run_setup.venv_dir, config=env_config)
+    eval_result = run_evaluation(gen_dir, dataset_dir, run_setup.venv_dir, config=env_config)
     logger.info("=" * 60)
 
     # Add generation to context
@@ -712,6 +796,9 @@ def run_generation(
             else "Single",
         },
     )
+
+    # Update structured memory after evaluation
+    _update_structured_memory(run_dir, current_gen, eval_result, target_agent_success)
 
     # Run feedback agent (if not the last generation)
     if current_gen < max_gen:

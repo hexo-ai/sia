@@ -1,0 +1,7 @@
+{
+  "profile_id": "nebius-meta",
+  "name": "GPT OSS 120B meta agent on Nebius",
+  "agent_impl": "pydantic-ai",
+  "model": "openai/gpt-oss-120b-fast",
+  "provider_id": "nebius"
+}

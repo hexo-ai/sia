@@ -1,0 +1,7 @@
+{
+  "profile_id": "openai-target",
+  "name": "GPT-4o-mini target",
+  "model": "gpt-4o-mini",
+  "provider_id": "openai",
+  "agent_reference": "default"
+}

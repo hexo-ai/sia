@@ -1,0 +1,7 @@
+{
+  "profile_id": "openai-meta",
+  "name": "GPT-4o meta agent",
+  "agent_impl": "pydantic-ai",
+  "model": "gpt-4o",
+  "provider_id": "openai"
+}

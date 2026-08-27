@@ -142,7 +142,16 @@ def _make_tools(working_dir: str):
         except OSError as e:
             return f"Error running command: {e}"
 
-    return [write_file, read_file, bash]
+    def list_dir(path: str = ".") -> str:
+        """List files in a directory (defaults to working directory)."""
+        target = _resolve(path)
+        try:
+            entries = os.listdir(target)
+            return "\n".join(sorted(entries)) if entries else "(empty directory)"
+        except OSError as e:
+            return f"Error listing directory: {e}"
+
+    return [write_file, read_file, bash, list_dir]
 
 
 async def run_agent_pydantic_ai(model_name, max_turns, prompt, agent_working_directory, provider=None):
@@ -167,7 +176,17 @@ async def run_agent_pydantic_ai(model_name, max_turns, prompt, agent_working_dir
         request_limit = Config().DEFAULT_MAX_TURNS
 
     try:
-        agent = Agent(_resolve_model(model_name, provider), tools=_make_tools(agent_working_directory))
+        agent = Agent(
+            _resolve_model(model_name, provider),
+            tools=_make_tools(agent_working_directory),
+            system_prompt=(
+                f"You are an AI assistant that writes files to disk. "
+                f"Your working directory is: {agent_working_directory}. "
+                "You MUST use the write_file tool to save any files — "
+                "do NOT just output code as text. "
+                "Always call write_file with the filename and complete file content."
+            ),
+        )
         result = await agent.run(prompt, usage_limits=UsageLimits(request_limit=request_limit))
 
         elapsed_time = (datetime.now() - start_time).total_seconds()

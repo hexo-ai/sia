@@ -860,9 +860,20 @@ Follow these steps:
 NOTE: If you see errors or incomplete execution logs, focus on making the RL pipeline more robust.
 """
 
+    # Load structured memory if available
+    memory_path = os.path.join(run_dir, "memory.md")
+    structured_memory = ""
+    if os.path.exists(memory_path):
+        try:
+            with open(memory_path, encoding="utf-8") as _mf:
+                _mc = _mf.read()
+            structured_memory = f"\n--- STRUCTURED MEMORY (READ THIS FIRST — DO NOT REPEAT FAILURES, DO NOT REMOVE WINS) ---\n{_mc}\n---\n"
+        except OSError:
+            pass
+
     # Harness mode (default - code/prompt improvement)
     base = f"""You are an expert AI Engineer analyzing agent scaffolds for iterative improvement.
-
+{structured_memory}
 **GENERATION CONTEXT**:
 - Current generation: {current_gen}
 - Previous generations: {previous_gens}
