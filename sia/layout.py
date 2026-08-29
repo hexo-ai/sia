@@ -30,6 +30,7 @@ class Names:
     TRAIN_STDOUT_LOG = "train_stdout.log"
     EVAL_LOG = "evaluation.log"
     RESULTS_JSON = "results.json"
+    TRANSFER_EVIDENCE_JSON = "transfer_evidence.json"
     CONTEXT_MD = "context.md"
     IMPROVEMENT_MD = "improvement.md"
     META_PROMPT = "meta_agent_prompt.txt"

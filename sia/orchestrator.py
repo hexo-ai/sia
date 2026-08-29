@@ -46,22 +46,24 @@ import asyncio
 import glob
 import json
 import os
+import re
 import subprocess
 import time
 import traceback
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sia import __version__, cli
 from sia.agent_reference import ResolvedAgentReference, copy_reference_into, resolve_agent_reference
 from sia.config import Config
-from sia.io_utils import file_size_ok, write_text
+from sia.io_utils import file_size_ok, safe_load_json, write_text
 from sia.layout import BUNDLED_TASKS, Names, RunLayout, TaskLayout, resolve_task_dir, venv_python_path
 from sia.logging_setup import configure_logging, get_logger
 from sia.profiles import MetaAgentProfile, load_meta_agent_profile, load_target_agent_profile
 from sia.prompts import build_feedback_prompt, build_meta_prompt
 from sia.providers import Provider
-from sia.results import FeedbackContext, TargetAgentResult
+from sia.results import FeedbackContext, TargetAgentResult, TransferEvidenceCard
 from sia.run_setup import RunSetup, TaskFiles, install_requirements, load_task_files, setup_run_directory
 from sia.util import run_agent
 
@@ -80,7 +82,239 @@ __all__ = [
     "setup_run_directory",
 ]
 
+_TRANSFER_EVIDENCE_MAX_BULLETS = 5
+_TRANSFER_EVIDENCE_SCORE_KEYS = ("accuracy", "score", "f1", "reward", "loss")
+_TRANSFER_EVIDENCE_LOWER_IS_BETTER_KEYS = {"loss"}
+_RESIDUE_HINTS = (
+    "task-specific",
+    "this task",
+    "this run",
+    "this dataset",
+    "this issue",
+    "in this gen",
+    "for this",
+    "specific to",
+    "hardcoded",
+)
+
 logger = get_logger(__name__)
+
+
+def _truncate_transfer_list(values: list[Any]) -> list[str]:
+    cleaned: list[str] = []
+    for value in values:
+        if len(cleaned) >= _TRANSFER_EVIDENCE_MAX_BULLETS:
+            break
+        if not isinstance(value, str):
+            continue
+        stripped = value.strip()
+        if stripped:
+            cleaned.append(stripped)
+    return cleaned
+
+
+def _extract_improvement_bullets(improvement_content: str) -> list[str]:
+    bullet_pattern = r"^[-*]\s+(.+)$"
+    bullets = re.findall(bullet_pattern, improvement_content, re.MULTILINE)
+
+    numbered_pattern = r"^\d+\.\s+(.+)$"
+    numbered = re.findall(numbered_pattern, improvement_content, re.MULTILINE)
+
+    all_lines = bullets + numbered
+    return [line.strip() for line in all_lines if line.strip() and not line.strip().endswith(":")]
+
+
+def _partition_bullets(bullets: list[str]) -> tuple[list[str], list[str]]:
+    reusable: list[str] = []
+    residue: list[str] = []
+    for line in bullets:
+        lower = line.lower()
+        if any(hint in lower for hint in _RESIDUE_HINTS):
+            residue.append(line)
+        else:
+            reusable.append(line)
+    return reusable, residue
+
+
+def _read_score(results_data: dict[str, Any] | None, score_key: str | None = None) -> tuple[str | None, float | None]:
+    if not isinstance(results_data, dict):
+        return None, None
+
+    keys = (score_key,) if score_key is not None else _TRANSFER_EVIDENCE_SCORE_KEYS
+    ordered_keys = [key for key in keys if isinstance(key, str)]
+
+    for key in ordered_keys:
+        raw_value = results_data.get(key)
+        if not isinstance(raw_value, (int, float, str)):
+            continue
+        try:
+            parsed_value = raw_value.rstrip("%") if isinstance(raw_value, str) else raw_value
+            value = float(parsed_value)
+            return key, value
+        except (TypeError, ValueError):
+            continue
+
+    return None, None
+
+
+def _read_previous_score(current_gen: int, gen_dir: str, score_key: str | None) -> float | None:
+    previous_gen_num = current_gen - 1
+    if previous_gen_num < 1:
+        return None
+    previous_dir = os.path.join(os.path.dirname(gen_dir), f"gen_{previous_gen_num}")
+    previous_results = safe_load_json(os.path.join(previous_dir, Names.RESULTS_JSON))
+    previous_results_dict = previous_results if isinstance(previous_results, dict) else None
+    _key, value = _read_score(previous_results_dict, score_key=score_key)
+    return value
+
+
+def _score_delta_supports_reuse(score_key: str | None, score_delta: float | None) -> bool:
+    if score_delta is None:
+        return True
+    if score_key in _TRANSFER_EVIDENCE_LOWER_IS_BETTER_KEYS:
+        return score_delta < 0
+    return score_delta > 0
+
+
+def _build_transfer_evidence_card(
+    current_gen: int,
+    gen_dir: str,
+    improvement_path: str | None,
+    evaluation_result: dict,
+) -> TransferEvidenceCard:
+    results_path = os.path.join(gen_dir, Names.RESULTS_JSON)
+    results_data = safe_load_json(results_path)
+    results_data_dict = results_data if isinstance(results_data, dict) else None
+
+    evaluator_status = "missing"
+    if evaluation_result.get("status") == "success" and results_data_dict is not None:
+        evaluator_status = "passed"
+    elif evaluation_result.get("status") == "error":
+        evaluator_status = "error"
+    elif results_data_dict is not None:
+        evaluator_status = "failed"
+
+    score_key, score_value = _read_score(results_data_dict)
+    prev_score = _read_previous_score(current_gen, gen_dir, score_key)
+    score_delta = score_value - prev_score if score_key and score_value is not None and prev_score is not None else None
+
+    reusable_bullets: list[str] = []
+    residue_bullets: list[str] = []
+    if improvement_path and os.path.exists(improvement_path):
+        try:
+            raw_improvement = Path(improvement_path).read_text(encoding="utf-8")
+            bullets = _extract_improvement_bullets(raw_improvement)
+            reusable_bullets, residue_bullets = _partition_bullets(bullets)
+        except OSError as error:
+            logger.warning(f"  ⚠ Could not read improvement.md for transfer evidence: {error}")
+
+    default_claim_boundary = (
+        "Treat residue as task-specific context, and apply only reusable bullets unless explicitly validated by "
+        "evaluation evidence."
+    )
+
+    unsupported_claims: list[str] = []
+    if not score_key and not reusable_bullets:
+        unsupported_claims.append(
+            "No stable metric + bounded reusable signal was available this generation; avoid broad claims about transfer "
+            "quality."
+        )
+
+    accepted_for_reuse = (
+        evaluator_status == "passed" and bool(reusable_bullets) and _score_delta_supports_reuse(score_key, score_delta)
+    )
+
+    return TransferEvidenceCard(
+        generation=current_gen,
+        accepted_for_reuse=accepted_for_reuse,
+        evaluator_status=evaluator_status,
+        score_delta=score_delta,
+        reusable_changes=_truncate_transfer_list(reusable_bullets),
+        task_specific_residue=_truncate_transfer_list(residue_bullets),
+        unsupported_claims=unsupported_claims,
+        claim_boundary=default_claim_boundary,
+    )
+
+
+def _write_transfer_evidence_card(gen_dir: str, card: TransferEvidenceCard) -> str | None:
+    transfer_path = os.path.join(gen_dir, Names.TRANSFER_EVIDENCE_JSON)
+    try:
+        write_text(transfer_path, json.dumps(card.as_dict(), indent=2))
+        return transfer_path
+    except (OSError, TypeError) as error:
+        logger.warning(f"  ✗ Failed to write transfer evidence to {transfer_path}: {error}")
+        return None
+
+
+def _format_transfer_evidence_section(transfer_evidence_path: str | None) -> str:
+    if not transfer_evidence_path or not os.path.exists(transfer_evidence_path):
+        return (
+            "**TRANSFER EVIDENCE**:\nNo transfer_evidence.json found. No reusable guidance boundary is available yet."
+        )
+
+    transfer_data = safe_load_json(transfer_evidence_path)
+    if not isinstance(transfer_data, dict):
+        return "**TRANSFER EVIDENCE**:\nMalformed transfer_evidence.json, reuse boundary is unavailable."
+
+    accepted_for_reuse = transfer_data.get("accepted_for_reuse")
+    score_delta = transfer_data.get("score_delta")
+    evaluator_status = transfer_data.get("evaluator_status", "unknown")
+    generation = transfer_data.get("generation")
+    negative_probe_hits = transfer_data.get("negative_probe_hits")
+
+    reusable_data = transfer_data.get("reusable_changes", [])
+    residue_data = transfer_data.get("task_specific_residue", [])
+    unsupported_data = transfer_data.get("unsupported_claims", [])
+    claim_boundary = transfer_data.get("claim_boundary") or ""
+
+    reusable = _truncate_transfer_list(reusable_data) if isinstance(reusable_data, list) else []
+    residue = _truncate_transfer_list(residue_data) if isinstance(residue_data, list) else []
+    unsupported = _truncate_transfer_list(unsupported_data) if isinstance(unsupported_data, list) else []
+
+    lines = [f"**TRANSFER EVIDENCE**: evaluator={evaluator_status}"]
+    if isinstance(generation, int):
+        lines.append(f"- Generation: {generation}")
+    if isinstance(accepted_for_reuse, bool):
+        lines.append(f"- Accepted for reuse: {'yes' if accepted_for_reuse else 'no'}")
+    if isinstance(score_delta, (int, float)):
+        lines.append(f"- Score delta: {score_delta:+.4f}")
+
+    if reusable:
+        reusable_label = (
+            "- Accepted reusable changes:"
+            if accepted_for_reuse is not False
+            else "- Candidate changes not accepted for reuse:"
+        )
+        lines.append(reusable_label)
+        lines.extend(f"  * {item}" for item in reusable)
+
+    if residue:
+        lines.append("- Task-specific residue to avoid carrying forward:")
+        lines.extend(f"  * {item}" for item in residue)
+
+    if unsupported:
+        lines.append("- Unsupported claim notes:")
+        lines.extend(f"  * {item}" for item in unsupported)
+
+    if isinstance(negative_probe_hits, int):
+        lines.append(f"- Negative probe hits: {negative_probe_hits}")
+
+    if claim_boundary:
+        lines.append(f"- Claim boundary: {claim_boundary}")
+
+    if not (
+        isinstance(generation, int)
+        or isinstance(accepted_for_reuse, bool)
+        or isinstance(score_delta, (int, float))
+        or reusable
+        or residue
+        or unsupported
+        or isinstance(negative_probe_hits, int)
+        or claim_boundary
+    ):
+        lines.append("- No usable transfer signal was detected.")
+
+    return "\n".join(lines)
 
 
 # ========================
@@ -433,6 +667,7 @@ def _build_feedback_context(
     stdout_log_file: str,
     task_files: TaskFiles,
     config: Config | None = None,
+    transfer_evidence_path: str | None = None,
 ) -> tuple[str, str]:
     """Build execution status and section for feedback prompt.
 
@@ -522,9 +757,13 @@ NOTE: If you see an "error" field in the above JSON, it means the execution log 
     stdout_lines = target_agent_stdout.split("\n")
     last_10_lines = "\n".join(stdout_lines[-10:]) if len(stdout_lines) > 10 else target_agent_stdout
 
+    transfer_evidence_section = _format_transfer_evidence_section(transfer_evidence_path)
+    status_blocks = [block.strip() for block in (eval_results_section, transfer_evidence_section) if block]
+    status_text = "\n\n".join(status_blocks)
+
     if target_agent_success:
         execution_status = f"""SUCCESS: Target agent completed execution successfully.
-{eval_results_section}
+{status_text}
 
 **Last 10 lines of output**:
 ```
@@ -535,7 +774,7 @@ Full logs available at: {stdout_log_file}
 """
     else:
         execution_status = f"""FAILED: {target_agent_error_msg}
-{eval_results_section}
+{status_text}
 
 **Last 10 lines of output**:
 ```
@@ -693,7 +932,16 @@ def run_generation(
     # Run evaluation (if evaluate.py exists)
     logger.info("=" * 60)
     logger.info("Running evaluation (if available)...")
-    run_evaluation(gen_dir, dataset_dir, run_setup.venv_dir, config=env_config)
+    evaluation_result = run_evaluation(gen_dir, dataset_dir, run_setup.venv_dir, config=env_config)
+    transfer_evidence_path = _write_transfer_evidence_card(
+        gen_dir,
+        _build_transfer_evidence_card(
+            current_gen=current_gen,
+            gen_dir=gen_dir,
+            improvement_path=layout.improvement_md(current_gen),
+            evaluation_result=evaluation_result,
+        ),
+    )
     logger.info("=" * 60)
 
     # Add generation to context
@@ -707,6 +955,7 @@ def run_generation(
             "agent_path": target_agent_path,
             "gen_dir": gen_dir,
             "improvement_path": improvement_md_path if os.path.exists(improvement_md_path) else None,
+            "transfer_evidence_path": transfer_evidence_path,
             "execution_type": "Multi-trajectory"
             if os.path.isdir(layout.agent_execution_dir(current_gen))
             else "Single",
@@ -727,6 +976,7 @@ def run_generation(
             target_agent_stdout=target_agent_stdout,
             target_agent_stderr=target_agent_stderr,
             stdout_log_file=stdout_log_file,
+            transfer_evidence_path=transfer_evidence_path,
             task_files=task_files,
             config=env_config,
         )
