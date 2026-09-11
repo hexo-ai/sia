@@ -66,7 +66,7 @@ the gateway as a first-class provider — OpenRouter does — because the generi
 **strips `cache_control` from every message**, silently disabling prompt caching, and cannot report
 usage or cost. Naming the provider fixes all three.
 
-Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`, `openrouter`.
+Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`, `openrouter`, `requesty`.
 
 ### Profiles — one per agent role
 
@@ -118,6 +118,8 @@ Bundled profiles:
 | `kimi-nebius-target` | target | `agent_reference: default` | `moonshotai/Kimi-K2.6` | `nebius` |
 | `openrouter-meta` | meta | `agent_impl: openhands` | `anthropic/claude-haiku-4.5` | `openrouter` |
 | `openrouter-target` | target | `agent_reference: default` | `anthropic/claude-haiku-4.5` | `openrouter` |
+| `requesty-meta` | meta | `agent_impl: openhands` | `anthropic/claude-haiku-4-5` | `requesty` |
+| `requesty-target` | target | `agent_reference: default` | `anthropic/claude-haiku-4-5` | `requesty` |
 
 ### agent_reference — the target agent's seed code + deps
 
@@ -205,6 +207,40 @@ Cost reporting reflects the **native vendor's** published prices, looked up via
 figures as an estimate and track real spend on the
 [OpenRouter activity page](https://openrouter.ai/activity).
 
+### One Requesty key for both agents
+
+[Requesty](https://docs.requesty.ai) is another OpenAI-compatible gateway (700+ models), so the
+same single-key setup works with the bundled `requesty-meta` / `requesty-target` profiles:
+
+```bash
+pip install 'sia-agent[openhands]'   # the meta profile uses the openhands agent impl
+export REQUESTY_API_KEY="..."        # both agents; keys from https://app.requesty.ai/api-keys
+sia run --task gpqa \
+        --meta-agent-profile requesty-meta \
+        --target-agent-profile requesty-target \
+        --max_gen 5 --run_id 4
+```
+
+Both bundled Requesty profiles use `anthropic/claude-haiku-4-5`. To swap models, copy them into
+`./profiles/` and change `model` to any Requesty model id from `GET https://router.requesty.ai/v1/models`.
+Ids keep their vendor namespace (`openai/gpt-4o-mini`, `openai/gpt-5-mini`, `anthropic/claude-sonnet-4-5`,
+`google/gemini-2.5-flash`), since that is how Requesty routes. Requesty also publishes managed
+routing policies at `GET https://router.requesty.ai/v1/models/managed`: their short ids
+(`claude-haiku-4-5`, `claude-sonnet-4-5`) are accepted as-is in `model` and route across several
+upstream providers. As with OpenRouter, update `model_canonical_name` on the **meta** profile
+whenever you change `model`.
+
+litellm has no first-class Requesty provider, so the `requesty` provider leaves `litellm_prefix`
+unset and the `openhands` agent impl uses the generic `openai` route. That route drops
+`cache_control` breakpoints (see the OpenRouter note above), so the meta agent sends no explicit
+prompt cache markers through Requesty. Cost reporting uses the native vendor's prices via
+`model_canonical_name`; track real spend in the Requesty dashboard.
+
+Requesty has regional endpoints. To route through the EU (Frankfurt) region, copy
+`sia/defaults/providers/requesty.json` to `./providers/requesty.json` and set `base_url` to
+`https://router.eu.requesty.ai/v1` (`router.us.requesty.ai` and `router.ap.requesty.ai` are the
+US and AP equivalents; the same key works on all of them).
+
 ### Pointing the meta/feedback agent at another provider
 
 The `claude` agent impl is Anthropic-only (a profile pairing `agent_impl: claude` with a non-anthropic
@@ -237,6 +273,7 @@ export OPENAI_API_KEY="..."      # openai provider
 export TOGETHER_API_KEY="..."    # together provider
 export NEBIUS_API_KEY="..."      # nebius provider
 export OPENROUTER_API_KEY="..."  # openrouter provider (one key, 400+ models)
+export REQUESTY_API_KEY="..."    # requesty provider (one key, 700+ models)
 ```
 
 ## Comparing multiple LLMs on the same task

@@ -77,6 +77,21 @@ def test_pydantic_ai_openrouter_uses_native_provider(monkeypatch):
     assert model.base_url.rstrip("/") == "https://openrouter.ai/api/v1"
 
 
+def test_pydantic_ai_requesty_uses_generic_openai_provider_at_requesty_base_url(monkeypatch):
+    """PydanticAI ships no native Requesty provider; the bundled definition takes the generic base_url route."""
+    pytest.importorskip("pydantic_ai")
+    from sia.agent_impls.pydantic_ai import _resolve_model
+    from sia.providers import load_provider
+
+    monkeypatch.setenv("REQUESTY_API_KEY", "test-key")
+    requesty = load_provider("requesty")
+
+    model = _resolve_model("openai/gpt-4o-mini", requesty)
+    assert model.model_name == "openai/gpt-4o-mini"
+    assert model.system == "openai"
+    assert model.base_url.rstrip("/") == "https://router.requesty.ai/v1"
+
+
 def test_pydantic_ai_openai_compatible_provider_requires_configured_api_key(monkeypatch):
     from sia.agent_impls.pydantic_ai import _resolve_model
     from sia.providers import Provider
@@ -188,6 +203,17 @@ def test_openhands_model_uses_provider_declared_litellm_prefix():
     nebius = load_provider("nebius")
     assert nebius.litellm_prefix is None
     assert _resolve_model("moonshotai/Kimi-K2.6", nebius) == "openai/moonshotai/Kimi-K2.6"
+
+
+def test_openhands_model_uses_generic_openai_prefix_for_requesty():
+    """litellm has no first-class Requesty provider, so vendor-namespaced ids get the generic openai prefix."""
+    from sia.agent_impls.openhands import _resolve_model
+    from sia.providers import load_provider
+
+    requesty = load_provider("requesty")
+    assert requesty.litellm_prefix is None
+    assert _resolve_model("anthropic/claude-haiku-4-5", requesty) == "openai/anthropic/claude-haiku-4-5"
+    assert _resolve_model("openai/anthropic/claude-haiku-4-5", requesty) == "openai/anthropic/claude-haiku-4-5"
 
 
 def test_run_agent_forwards_model_canonical_name_only_when_set():

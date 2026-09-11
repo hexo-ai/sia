@@ -123,3 +123,18 @@ def test_model_canonical_name_is_read_when_present():
     profile = load_meta_agent_profile("openrouter-meta")
     assert profile.model == "anthropic/claude-haiku-4.5"
     assert profile.model_canonical_name == "claude-haiku-4-5"
+
+
+def test_bundled_requesty_profiles_resolve_the_requesty_provider():
+    """Both bundled Requesty profiles route Claude Haiku 4.5 through the requesty provider."""
+    meta = load_meta_agent_profile("requesty-meta")
+    assert meta.agent_impl == "openhands"
+    assert meta.model == "anthropic/claude-haiku-4-5"
+    assert meta.model_canonical_name == "claude-haiku-4-5"
+    assert meta.provider.provider_id == "requesty"
+
+    target = load_target_agent_profile("requesty-target")
+    assert isinstance(target, TargetAgentProfile)
+    assert target.model == "anthropic/claude-haiku-4-5"
+    assert target.provider.provider_id == "requesty"
+    assert target.agent_reference.kind == "default"

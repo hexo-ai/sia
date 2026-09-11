@@ -74,6 +74,7 @@ export ANTHROPIC_API_KEY="..."   # for anthropic/* models
 export GEMINI_API_KEY="..."      # for gemini/* models (or GOOGLE_API_KEY)
 export OPENAI_API_KEY="..."      # for openai/* models
 export OPENROUTER_API_KEY="..."  # for any model, via the openrouter provider
+export REQUESTY_API_KEY="..."    # for any model, via the requesty provider
 ```
 
 One key for everything: the bundled `openrouter-meta` / `openrouter-target` profiles route both
@@ -82,6 +83,13 @@ agents through [OpenRouter](https://openrouter.ai/models), so a single `OPENROUT
 
 ```bash
 sia run --task gpqa --meta-agent-profile openrouter-meta --target-agent-profile openrouter-target
+```
+
+The bundled `requesty-meta` / `requesty-target` profiles do the same through
+[Requesty](https://docs.requesty.ai) with a single `REQUESTY_API_KEY`:
+
+```bash
+sia run --task gpqa --meta-agent-profile requesty-meta --target-agent-profile requesty-target
 ```
 
 Full provider/model reference: [docs/configuration.md](docs/configuration.md#api-keys).

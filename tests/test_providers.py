@@ -27,6 +27,16 @@ def test_load_nebius_provider():
     assert p.api_key_env == "NEBIUS_API_KEY"
 
 
+def test_load_requesty_provider():
+    p = load_provider("requesty")
+    assert p.provider_id == "requesty"
+    assert p.client_kind == "openai"
+    assert p.base_url == "https://router.requesty.ai/v1"
+    assert p.api_key_env == "REQUESTY_API_KEY"
+    # litellm has no first-class Requesty provider, so the generic openai route is kept.
+    assert p.litellm_prefix is None
+
+
 def test_unknown_provider_name_raises():
     with pytest.raises(SystemExit):
         load_provider("does-not-exist")

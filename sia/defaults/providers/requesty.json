@@ -1,0 +1,7 @@
+{
+  "provider_id": "requesty",
+  "name": "Requesty",
+  "client_kind": "openai",
+  "base_url": "https://router.requesty.ai/v1",
+  "api_key_env": "REQUESTY_API_KEY"
+}
