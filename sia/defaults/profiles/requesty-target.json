@@ -1,0 +1,7 @@
+{
+  "profile_id": "requesty-target",
+  "name": "Requesty target agent (Claude Haiku 4.5)",
+  "model": "anthropic/claude-haiku-4-5",
+  "provider_id": "requesty",
+  "agent_reference": "default"
+}
