@@ -27,6 +27,13 @@ def test_load_nebius_provider():
     assert p.api_key_env == "NEBIUS_API_KEY"
 
 
+def test_load_cheaperinference_provider():
+    p = load_provider("cheaperinference")
+    assert p.client_kind == "openai"
+    assert p.base_url == "https://api.cheaperinference.com/v1"
+    assert p.api_key_env == "CHEAPER_INFERENCE_API_KEY"
+
+
 def test_unknown_provider_name_raises():
     with pytest.raises(SystemExit):
         load_provider("does-not-exist")

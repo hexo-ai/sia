@@ -1,0 +1,7 @@
+{
+  "profile_id": "cheaperinference-meta",
+  "name": "Cheaper Inference meta agent (GPT-5.4 mini, OpenHands)",
+  "agent_impl": "openhands",
+  "model": "gpt-5.4-mini",
+  "provider_id": "cheaperinference"
+}
