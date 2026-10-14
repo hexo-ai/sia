@@ -66,7 +66,7 @@ the gateway as a first-class provider — OpenRouter does — because the generi
 **strips `cache_control` from every message**, silently disabling prompt caching, and cannot report
 usage or cost. Naming the provider fixes all three.
 
-Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`, `openrouter`.
+Bundled providers: `anthropic`, `gemini`, `openai`, `together`, `nebius`, `openrouter`, `cheaperinference`.
 
 ### Profiles — one per agent role
 
@@ -118,6 +118,8 @@ Bundled profiles:
 | `kimi-nebius-target` | target | `agent_reference: default` | `moonshotai/Kimi-K2.6` | `nebius` |
 | `openrouter-meta` | meta | `agent_impl: openhands` | `anthropic/claude-haiku-4.5` | `openrouter` |
 | `openrouter-target` | target | `agent_reference: default` | `anthropic/claude-haiku-4.5` | `openrouter` |
+| `cheaperinference-meta` | meta | `agent_impl: openhands` | `gpt-5.4-mini` | `cheaperinference` |
+| `cheaperinference-target` | target | `agent_reference: default` | `gpt-5.4-mini` | `cheaperinference` |
 
 ### agent_reference — the target agent's seed code + deps
 
@@ -205,6 +207,26 @@ Cost reporting reflects the **native vendor's** published prices, looked up via
 figures as an estimate and track real spend on the
 [OpenRouter activity page](https://openrouter.ai/activity).
 
+### One Cheaper Inference key for both agents
+
+[Cheaper Inference](https://cheaperinference.com/docs) is an OpenAI-compatible LLM gateway, so the
+same single-key setup works with the bundled `cheaperinference-meta` / `cheaperinference-target`
+profiles:
+
+```bash
+pip install 'sia-agent[openhands]'          # the meta profile uses the openhands agent impl
+export CHEAPER_INFERENCE_API_KEY="..."      # both agents; keys from https://cheaperinference.com/signup
+sia run --task gpqa \
+        --meta-agent-profile cheaperinference-meta \
+        --target-agent-profile cheaperinference-target \
+        --max_gen 5 --run_id 4
+```
+
+Both bundled profiles use `gpt-5.4-mini`. To swap models, copy them into `./profiles/` and change
+`model` to any id from `GET https://api.cheaperinference.com/v1/models`. Ids are bare
+(`gpt-5.4`, `claude-sonnet-5`, `gemini-3.1-pro`). The provider leaves `litellm_prefix` unset, so the
+`openhands` agent impl uses the generic `openai` route.
+
 ### Pointing the meta/feedback agent at another provider
 
 The `claude` agent impl is Anthropic-only (a profile pairing `agent_impl: claude` with a non-anthropic
@@ -237,6 +259,7 @@ export OPENAI_API_KEY="..."      # openai provider
 export TOGETHER_API_KEY="..."    # together provider
 export NEBIUS_API_KEY="..."      # nebius provider
 export OPENROUTER_API_KEY="..."  # openrouter provider (one key, 400+ models)
+export CHEAPER_INFERENCE_API_KEY="..."  # cheaperinference provider
 ```
 
 ## Comparing multiple LLMs on the same task

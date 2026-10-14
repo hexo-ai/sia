@@ -1,0 +1,7 @@
+{
+  "provider_id": "cheaperinference",
+  "name": "Cheaper Inference",
+  "client_kind": "openai",
+  "base_url": "https://api.cheaperinference.com/v1",
+  "api_key_env": "CHEAPER_INFERENCE_API_KEY"
+}

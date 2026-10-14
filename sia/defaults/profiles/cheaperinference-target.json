@@ -1,0 +1,7 @@
+{
+  "profile_id": "cheaperinference-target",
+  "name": "Cheaper Inference target agent (GPT-5.4 mini)",
+  "model": "gpt-5.4-mini",
+  "provider_id": "cheaperinference",
+  "agent_reference": "default"
+}
